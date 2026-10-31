@@ -7,7 +7,7 @@ const securedDirs = new Set();
 export function restrict(file, directory = false) {
   if (directory && securedDirs.has(file)) return;
   if (process.platform !== 'win32') { fs.chmodSync(file, directory ? 0o700 : 0o600); return; }
-  const script = `$id=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=New-Object System.Security.AccessControl.${directory ? 'DirectorySecurity' : 'FileSecurity'}; $acl.SetOwner($id); $acl.SetAccessRuleProtection($true,$false); $rule=New-Object System.Security.AccessControl.FileSystemAccessRule($id,'FullControl',${directory ? "'ContainerInherit,ObjectInherit','None'," : ''}'Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:DV_PRIVATE_PATH -AclObject $acl`;
+  const script = `$id=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=New-Object System.Security.AccessControl.${directory ? 'DirectorySecurity' : 'FileSecurity'}; $acl.SetOwner($id); $acl.SetAccessRuleProtection($true,$false); $rule=New-Object System.Security.AccessControl.FileSystemAccessRule($id,'FullControl',${directory ? "'ContainerInherit,ObjectInherit','None'," : ''}'Allow'); $acl.AddAccessRule($rule); [System.IO.${directory ? 'Directory' : 'File'}]::SetAccessControl($env:DV_PRIVATE_PATH, $acl)`;
   const p = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_PRIVATE_PATH: file }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
   if (p.status !== 0) {
     // Report enough diagnostic context to identify policy/syntax failures, but

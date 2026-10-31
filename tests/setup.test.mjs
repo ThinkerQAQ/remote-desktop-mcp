@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
-import { privateWrite } from '../scripts/private-files.mjs';
+import { privateWrite, privateDir } from '../scripts/private-files.mjs';
 import { unitQuote } from '../scripts/runtime.mjs';
 import { isDirectExecution } from '../scripts/entrypoint.mjs';
 import { pathToFileURL } from 'node:url';
@@ -38,6 +38,20 @@ test('occupied preferred port chooses another loopback port', async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try { assert.notEqual(await freePort(server.address().port), server.address().port); }
   finally { server.close(); }
+});
+
+test('Windows private directories/files have explicit current-user-only ACLs', { skip: process.platform !== 'win32' }, () => {
+  const dir = path.join(os.tmpdir(), 'dv-private-acl-' + Date.now() + '-' + process.pid);
+  const file = path.join(dir, 'credential.json');
+  try {
+    privateDir(dir);
+    privateWrite(file, '{"synthetic":true}');
+    const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $id) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
+    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file }, encoding: 'utf8', windowsHide: true });
+    assert.equal(check.status, 0, 'Windows ACL verification failed');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('private writes enforce permissions and refuse symlinks', { skip: process.platform === 'win32' }, () => {

@@ -33,7 +33,14 @@ export function taskScript(action) {
   // No credentials appear in task definitions or command arguments.
   return `$ErrorActionPreference='Stop'; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(process.execPath)} -Argument ${psQuote('"' + runtimeScript + '" run')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${psQuote(label)} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName ${psQuote(label)}`;
 }
-function powershell(script) { return call('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]); }
+function powershell(script) {
+  // Windows PowerShell 5.1 must resolve its own built-in modules. GitHub Actions
+  // and shells launched by pwsh 7 may inject an incompatible PSModulePath.
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];
+  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
+    { env, encoding: 'utf8', timeout: 30000, windowsHide: true, stdio: 'pipe' });
+}
 async function control(action = 'status') {
   try {
     const c = readPrivateJSON(path.join(dir, 'control.json'));
