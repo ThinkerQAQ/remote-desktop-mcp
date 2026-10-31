@@ -1,10 +1,10 @@
+import { isDirectExecution } from './entrypoint.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
-import { pathToFileURL } from 'node:url';
 import { root, tunnelConfig } from './config.mjs';
 import { privateDir, privateWrite, readPrivateJSON } from './private-files.mjs';
 import { defaultManager, start, stop, status } from './runtime.mjs';
@@ -84,6 +84,6 @@ async function setup() {
     else console.log('User startup configured / 已配置当前用户启动。macOS/Windows resume at login; Linux logout persistence depends on lingering.');
   } finally { muted = false; rl?.close(); }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isDirectExecution(import.meta.url)) {
   try { await setup(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

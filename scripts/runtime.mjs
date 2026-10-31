@@ -1,10 +1,10 @@
+import { isDirectExecution } from './entrypoint.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
 import { root } from './config.mjs';
 import { privateDir, privateWrite, readPrivateJSON, restrict } from './private-files.mjs';
 
@@ -119,7 +119,7 @@ async function run() {
   const finish = code => { server.close(); server.closeAllConnections(); process.exitCode = stopping ? 0 : (code ?? 1); };
   child.once('error', () => finish(1)); child.once('exit', finish);
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isDirectExecution(import.meta.url)) {
   try {
     const action = process.argv[2];
     if (action === 'run') await run();

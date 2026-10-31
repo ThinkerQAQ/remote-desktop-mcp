@@ -1,6 +1,7 @@
+import { isDirectExecution } from './entrypoint.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export function prepareUpstream() {
   const base = path.join(root, 'node_modules/@wonderwhy-er/desktop-commander');
@@ -18,4 +19,4 @@ export function prepareUpstream() {
   if (!source.includes(original) && !source.includes(replacement)) throw new Error('Unexpected upstream schema converter; refusing an unreviewed patch');
   source = source.replace(original, replacement); fs.writeFileSync(server, source);
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) prepareUpstream();
+if (isDirectExecution(import.meta.url)) prepareUpstream();

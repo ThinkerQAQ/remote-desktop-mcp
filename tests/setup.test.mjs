@@ -9,6 +9,20 @@ import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
 import { privateWrite } from '../scripts/private-files.mjs';
 import { unitQuote } from '../scripts/runtime.mjs';
+import { isDirectExecution } from '../scripts/entrypoint.mjs';
+import { pathToFileURL } from 'node:url';
+
+test('entrypoint recognizes real path and symlink aliases (macOS /var and /private/var)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-entrypoint-'));
+  try {
+    const source = path.join(root, 'scripts/setup.mjs');
+    const alias = path.join(dir, 'entrypoint-alias.mjs');
+    fs.symlinkSync(source, alias);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, alias), true);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, source), true);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, path.join(root, 'scripts/runtime.mjs')), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('reject missing/multiline credentials and malformed tunnel identity', () => {
   assert.throws(() => validateInput('bad', 'key'));

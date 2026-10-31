@@ -9,7 +9,13 @@ export function restrict(file, directory = false) {
   if (process.platform !== 'win32') { fs.chmodSync(file, directory ? 0o700 : 0o600); return; }
   const script = `$id=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=New-Object System.Security.AccessControl.${directory ? 'DirectorySecurity' : 'FileSecurity'}; $acl.SetOwner($id); $acl.SetAccessRuleProtection($true,$false); $rule=New-Object System.Security.AccessControl.FileSystemAccessRule($id,'FullControl',${directory ? "'ContainerInherit,ObjectInherit','None'," : ''}'Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:DV_PRIVATE_PATH -AclObject $acl`;
   const p = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_PRIVATE_PATH: file }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
-  if (p.status !== 0) throw new Error('Could not restrict private Windows ACL');
+  if (p.status !== 0) {
+    // Report enough diagnostic context to identify policy/syntax failures, but
+    // never expose the private file path (or its contents) in public CI logs.
+    const diagnostic = (p.stderr || p.error?.message || `exit ${p.status}`)
+      .replaceAll(file, '<private-path>').trim().slice(0, 600);
+    throw new Error(`Could not restrict private Windows ACL: ${diagnostic}`);
+  }
   if (directory) securedDirs.add(file);
 }
 export function privateDir(dir) {
