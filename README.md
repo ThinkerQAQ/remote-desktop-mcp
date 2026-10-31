@@ -2,6 +2,8 @@
 
 [简体中文](README_ZH.md) · [Setup](docs/setup.md) · [Security](SECURITY.md) · [Review](docs/review.md)
 
+
+> **Experimental v0.1:** upstream transitive dependency advisories remain. See the [dependency review](docs/review.md#dependency-audit) before deployment.
 Connect an AI assistant to your development machine through **Desktop Commander and the official OpenAI tunnel-client**, using a persistent stdio process. This project packages the integration used by DV; it is not a replacement implementation of Desktop Commander or a desktop screen-control application.
 
 ## Features
