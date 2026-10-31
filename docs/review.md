@@ -41,4 +41,4 @@ Eight automated tests cover transport plus setup validation, port collision, pri
 - Windows: native PowerShell bootstrap, verified downloads, private files protected by the current user's ACL and a Scheduled Task per checkout; WSL is optional.
 - GitHub Actions exercises all three OSes on Node 22/24 using synthetic credentials and a mock local tunnel. This validates the runners, **not** every end-user machine, account registration or real ChatGPT remote MCP calls. No customer tunnel ID or API key is stored in CI.
 
-The first-run installers pin v0.3.0; existing installations are reused instead of silently upgraded. Users still create their own Tunnel ID/runtime key and register the custom MCP manually in ChatGPT.
+The first-run installers pin v0.3.1; existing installations are reused instead of silently upgraded. Users still create their own Tunnel ID/runtime key and register the custom MCP manually in ChatGPT.
