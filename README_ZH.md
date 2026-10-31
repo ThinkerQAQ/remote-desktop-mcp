@@ -3,7 +3,7 @@
 [English](README.md) · [安装部署](docs/setup.zh-CN.md) · [安全说明](docs/security.zh-CN.md) · [代码评审](docs/review.zh-CN.md)
 
 
-> **实验性 v0.1：**上游传递依赖仍有安全告警，部署前请阅读[依赖评审](docs/review.zh-CN.md#依赖审计)。
+> **实验性 v0.2：**上游传递依赖仍有安全告警，部署前请阅读[依赖评审](docs/review.zh-CN.md#依赖审计)。
 通过 **Desktop Commander＋官方 OpenAI tunnel-client**，让 AI 助手使用本机文件、终端和搜索工具，复用常驻的 stdio 进程。本项目整理了 DV 已经使用的集成方案；工具引擎来自 Desktop Commander，不提供桌面画面点击功能。
 
 ## 功能
@@ -15,22 +15,21 @@
 - 只读验收：初始化 MCP、发现工具并调用 `list_sessions`，不输出本机会话数据。
 - Linux/WSL2 常驻隧道部署，支持 Windows 本地 stdio；CI 覆盖两个系统。
 
-## 快速开始
-
-需要 Node.js **22.12+**、npm 和 Git，不依赖 Python。
+## 一键配置（Linux / WSL2）
 
 ```sh
-git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
-cd remote-desktop-mcp
-npm ci
-npm run check
-npm run doctor
-npm run smoke
+curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.2.0/install.sh | bash
 ```
 
-`npm run mcp` 启动 stdio 适配器。接入本地 MCP 客户端时，直接执行 `node /项目绝对路径/scripts/proxy.mjs`，避免 npm 提示信息进入协议通道。
+已经下载或克隆仓库：执行 `bash setup.sh`。Windows PowerShell：执行 `./setup.ps1`，需要已初始化的 WSL2 Ubuntu；入口会把源码复制到 Linux 文件系统。
 
-如需从 ChatGPT 远程连接，另行安装官方 [tunnel-client](https://github.com/openai/tunnel-client)、创建自己的隧道，再按[部署文档](docs/setup.zh-CN.md)操作。隧道创建权限、账户可用性和 ChatGPT MCP 注册是独立前提。Skill 安装成功或隧道健康，均不代表 MCP 工具已经注册和发现。
+向导会自动补齐 Node.js/tunnel-client（官方分发、SHA-256 校验），安装锁定的 npm 依赖，执行真实只读 MCP 测试，然后收集你自己的 Tunnel ID 和运行密钥（隐藏输入），保存私有配置、启动常驻进程并检查隧道就绪。重复运行可保留已保存值；端口冲突时自动换用空闲回环端口。不替换全局 Node 或现有 DV 隧道。
+
+用户仍需创建自己的隧道和运行密钥，并在 ChatGPT 注册自定义 MCP。向导会给出官方入口和下一步；完成前将远程注册与调用明确标为**待完成**，不会把本地或隧道成功当作远程全链路验收。这个文件/终端集成无需开启 Edge 调试。
+
+详细参数、重复运行、无人值守配置、恢复及边界见[向导说明](docs/wizard.zh-CN.md)。首次下载源码需要 curl/tar；Ubuntu/WSL 会通过 apt 补齐其他基础工具，sudo 可能要求输入系统密码；其他发行版需提前安装基础工具。运行依赖保存在项目下，npm 安装可能执行上游安装钩子。依赖安全告警仍按上文披露。
+
+开发验证使用 `npm ci`、`npm run check`、`npm run smoke`。本地 MCP 客户端直接执行 `node /项目绝对路径/scripts/proxy.mjs`。官方 [tunnel-client](https://github.com/openai/tunnel-client) 由向导另行安装，Git 中不内嵌其二进制。
 
 ## 定位与边界
 
@@ -38,7 +37,7 @@ DV 与 Remote Desktop Commander 的文件、命令能力重叠。DV 由自己部
 
 适配器**不提供沙箱或授权隔离**，上游工具包含 shell 执行；Desktop Commander 配置不能替代操作系统隔离。建议使用只拥有预期权限的独立账户。经隧道发出的请求和结果可能到达 AI 服务，本地执行不代表数据只留在本地。上游遥测和设置仍由上游控制，本适配器未关闭它们。
 
-长连接能减少重连，无法取消平台授权。终端执行本身不激活窗口，但启动 GUI 的命令可能影响焦点。v0.1 不管理原生 Windows 隧道服务，也不提供自动升级。
+长连接能减少重连，无法取消平台授权。终端执行本身不激活窗口，但启动 GUI 的命令可能影响焦点。v0.2 不管理原生 Windows 隧道服务，也不提供自动升级。
 
 ## 上游与许可证
 

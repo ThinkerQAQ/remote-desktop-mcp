@@ -2,6 +2,8 @@
 
 [English](setup.md)
 
+
+推荐使用[一键配置向导](wizard.zh-CN.md)，下文保留手动部署方法。
 ## 本地 MCP
 
 先完成 README 中的检查。本地 MCP 客户端直接执行 Node 加适配器绝对路径。可通过 `DV_CONFIG` 指定私有 TOML 文件，否则读取项目中的 `config.toml`，不存在时使用示例配置。该配置只控制本适配器，不会修改 Desktop Commander 自身设置。
