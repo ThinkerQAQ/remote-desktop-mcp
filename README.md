@@ -20,16 +20,18 @@ Connect an AI assistant to your development machine through **Desktop Commander 
 Linux, WSL2 or macOS terminal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.sh | bash
 ```
 
 Windows **PowerShell** (native; WSL2 is optional, not required):
 
 ```powershell
-irm https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.ps1 | iex
 ```
 
-Already cloned the repository? Run `bash setup.sh` on Linux/macOS or `./setup.ps1` in Windows PowerShell. Installers use the pinned v0.3.0 source archive on first run and reuse existing local installations.
+Download [versioned Windows/Linux/macOS packages](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/tag/v0.3.1) and verify the SHA-256 in `SHA256SUMS`. The bootstrap below also verifies the release asset before extraction.
+
+Already cloned the repository? Run `bash setup.sh` on Linux/macOS or `./setup.ps1` in Windows PowerShell. Installers use the pinned v0.3.1 source archive on first run and reuse existing local installations.
 
 The wizard installs missing Node.js/tunnel-client from official distributions with SHA-256 verification, runs locked npm installation and a real read-only MCP smoke test, asks for your own Tunnel ID and hidden runtime API key, saves private configuration, starts a persistent process and checks tunnel readiness. Re-running reuses saved inputs; port conflicts select a free loopback port. No global Node or existing DV tunnel is replaced.
 

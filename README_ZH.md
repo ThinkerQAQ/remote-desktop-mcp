@@ -20,16 +20,18 @@
 Linux、WSL2、macOS 终端：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.sh | bash
 ```
 
 **Windows 原生 PowerShell**（不要求安装 WSL2）：
 
 ```powershell
-irm https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.ps1 | iex
 ```
 
-已克隆仓库：Linux/macOS 执行 `bash setup.sh`；Windows PowerShell 执行 `./setup.ps1`。安装器首次获取固定版本 v0.3.0 的源码，重复运行复用已有安装。
+还可下载 [v0.3.1 Windows／Linux／macOS 对应发行包](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/tag/v0.3.1)，根据 `SHA256SUMS` 验证下载文件的 SHA-256；下方引导脚本也会自动校验发行包。
+
+已克隆仓库：Linux/macOS 执行 `bash setup.sh`；Windows PowerShell 执行 `./setup.ps1`。安装器首次获取固定版本 v0.3.1 的源码，重复运行复用已有安装。
 
 向导会自动补齐 Node.js/tunnel-client（官方分发、SHA-256 校验），安装锁定的 npm 依赖，执行真实只读 MCP 测试，然后收集你自己的 Tunnel ID 和运行密钥（隐藏输入），保存私有配置、启动常驻进程并检查隧道就绪。重复运行可保留已保存值；端口冲突时自动换用空闲回环端口。不替换全局 Node 或现有 DV 隧道。
 
