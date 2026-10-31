@@ -37,7 +37,7 @@ test('spawn failure returns failure', async () => {
   assert.equal(await relay('nonexistent-dv-program-12345', [], { input, output: new PassThrough(), error: new PassThrough() }), 1);
 });
 
-test('generated config refers to environment and initialized handshake', { skip: process.platform === 'win32' }, () => {
+test('generated config refers to environment and initialized handshake', () => {
   const config = tunnelConfig({ tunnel: { id: 'tunnel_EXAMPLE', api_key_env: 'OPENAI_API_KEY', health_port: 18832 } });
   assert.equal(config.control_plane.api_key, 'env:OPENAI_API_KEY');
   assert.equal(config.health.listen_addr, '127.0.0.1:18832');

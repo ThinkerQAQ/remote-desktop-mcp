@@ -45,7 +45,7 @@ function run(command, args, env) {
     child.on('error', reject); child.on('close', code => { clearTimeout(timer); resolve({ code, output }); });
   });
 }
-test('wizard runs real local smoke, retains credentials on rerun, starts/stops isolated mock tunnel', { skip: process.platform !== 'linux', timeout: 120000 }, async () => {
+for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && process.platform === 'linux' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-wizard-'));
   let started = false;
   const env = { ...process.env, DV_TUNNEL_ID: 'tunnel_EXAMPLE', DV_RUNTIME_API_KEY: 'synthetic-secret-do-not-print' };
@@ -53,18 +53,19 @@ test('wizard runs real local smoke, retains credentials on rerun, starts/stops i
   try {
     fs.cpSync(path.join(root, 'scripts'), path.join(dir, 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(root, 'config.example.toml'), path.join(dir, 'config.example.toml'));
-    fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+    fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-    const mock = path.join(dir, 'mock-tunnel');
+    const mock = path.join(dir, 'mock-tunnel.mjs');
     fs.writeFileSync(mock, `#!${process.execPath}\nimport fs from 'node:fs';import http from 'node:http';\nif(process.argv.includes('--version')) console.log('mock');else {const c=JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf('--config')+1]));const p=Number(c.health.listen_addr.split(':').at(-1));http.createServer((q,r)=>{r.end('ok');}).listen(p,'127.0.0.1');}\n`, { mode: 0o700 });
-    env.DV_TUNNEL_CLIENT = mock;
-    const args = [path.join(dir, 'scripts/setup.mjs'), '--non-interactive', '--background'];
+    env.DV_TUNNEL_CLIENT = process.execPath;
+    env.DV_TUNNEL_ARGS_JSON = JSON.stringify([mock]);
+    const args = [path.join(dir, 'scripts/setup.mjs'), '--non-interactive', ...(native ? [] : ['--background'])];
     let result = await run(process.execPath, [...args, '--configure-only'], env);
     assert.equal(result.code, 0, result.output);
     assert.ok(!result.output.includes(env.DV_RUNTIME_API_KEY));
     assert.ok(result.output.includes('not started'));
     const credentials = path.join(dir, 'runtime/credentials.json');
-    assert.equal(fs.statSync(credentials).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(credentials).mode & 0o777, 0o600);
     assert.equal(JSON.parse(fs.readFileSync(credentials)).apiKey, env.DV_RUNTIME_API_KEY);
     const reused = { ...env }; delete reused.DV_RUNTIME_API_KEY; delete reused.DV_TUNNEL_ID;
     result = await run(process.execPath, args, reused); started = true;
@@ -78,7 +79,16 @@ test('wizard runs real local smoke, retains credentials on rerun, starts/stops i
     assert.equal(result.code, 0, result.output);
   } finally {
     if (started) await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'stop'], env);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    if (native && process.platform === 'win32') {
+      const { createHash } = await import('node:crypto');
+      const name = 'remote-desktop-mcp-' + createHash('sha256').update(dir).digest('hex').slice(0, 10);
+      await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Unregister-ScheduledTask -TaskName '${name}' -Confirm:$false -ErrorAction SilentlyContinue`], env);
+    }
+    if (native && process.platform === 'darwin') {
+      const { createHash } = await import('node:crypto');
+      fs.rmSync(path.join(os.homedir(), 'Library/LaunchAgents', 'remote-desktop-mcp-' + createHash('sha256').update(dir).digest('hex').slice(0, 10) + '.plist'), { force: true });
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

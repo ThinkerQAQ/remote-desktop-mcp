@@ -16,8 +16,10 @@ export function keepMessage(message, filter = true) {
   return !(filter && message?.method === 'notifications/message' && ['info', 'debug'].includes(message.params?.level));
 }
 export function shellQuote(s) { return "'" + s.replaceAll("'", "'\"'\"'") + "'"; }
+// Go tunnel-client uses shell-style tokenization on every platform. Forward slashes
+// avoid backslash escapes in Windows paths; single quotes protect whitespace.
+export function commandQuote(s) { return shellQuote(process.platform === 'win32' ? s.replaceAll('\\', '/') : s); }
 export function tunnelConfig(config) {
-  if (process.platform === 'win32') throw new Error('Generate the managed tunnel config inside Linux/WSL2; Windows supports local stdio only');
   const t = config.tunnel ?? {};
   if (!/^tunnel_[A-Za-z0-9_-]+$/.test(t.id ?? '')) throw new Error('Set a valid tunnel.id in private config.toml');
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(t.api_key_env ?? '')) throw new Error('Invalid tunnel.api_key_env');
@@ -28,6 +30,6 @@ export function tunnelConfig(config) {
     health: { listen_addr: `127.0.0.1:${t.health_port}` },
     admin_ui: { open_browser: false },
     log: { level: 'info', format: 'json' },
-    mcp: { commands: [{ channel: 'main', command: `${shellQuote(process.execPath)} ${shellQuote(path.join(root, 'scripts/proxy.mjs'))}` }], stdio_send_initialized_notification: true }
+    mcp: { commands: [{ channel: 'main', command: `${commandQuote(process.execPath)} ${commandQuote(path.join(root, 'scripts/proxy.mjs'))}` }], stdio_send_initialized_notification: true }
   };
 }

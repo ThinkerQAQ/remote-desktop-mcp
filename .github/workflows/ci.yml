@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node: [22, 24]
     runs-on: ${{ matrix.os }}
     env:
@@ -22,14 +22,30 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - if: runner.os == 'Linux'
+      - if: runner.os != 'Windows'
         run: bash -n setup.sh install.sh
       - if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $tokens = $null
           $parseErrors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/setup.ps1", [ref]$tokens, [ref]$parseErrors) | Out-Null
+          foreach ($file in @('setup.ps1','install.ps1')) {
+            [System.Management.Automation.Language.Parser]::ParseFile("$PWD/$file", [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
+          }
           if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
+      - name: Native bootstrap and private configuration (synthetic credentials)
+        env:
+          DV_TUNNEL_ID: tunnel_EXAMPLE
+          DV_RUNTIME_API_KEY: synthetic-ci-only
+          DV_FORCE_MANAGED_NODE: ${{ matrix.node == 24 && '1' || '0' }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File setup.ps1 --non-interactive --configure-only
+          else
+            bash setup.sh --non-interactive --configure-only
+          fi
+      - run: npm run audit:high
       - run: npm run check
       - run: npm run smoke
