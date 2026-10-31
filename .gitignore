@@ -1,0 +1,12 @@
+node_modules/
+config.toml
+runtime/
+*.log
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite*
+*.pem
+*.key
+coverage/
