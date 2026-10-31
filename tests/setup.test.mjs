@@ -63,7 +63,7 @@ for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'nati
     let result = await run(process.execPath, [...args, '--configure-only'], env);
     assert.equal(result.code, 0, result.output);
     assert.ok(!result.output.includes(env.DV_RUNTIME_API_KEY));
-    assert.ok(result.output.includes('not started'));
+    assert.match(result.output, /not started/i);
     const credentials = path.join(dir, 'runtime/credentials.json');
     if (process.platform !== 'win32') assert.equal(fs.statSync(credentials).mode & 0o777, 0o600);
     assert.equal(JSON.parse(fs.readFileSync(credentials)).apiKey, env.DV_RUNTIME_API_KEY);

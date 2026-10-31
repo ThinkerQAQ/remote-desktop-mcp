@@ -9,10 +9,13 @@ New-Item -ItemType Directory -Force $tools, $temp | Out-Null
 function Download-Verified($url, $fileName, $sumsUrl) {
     $file = Join-Path $temp $fileName
     Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $file
-    $sums = (Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl).Content
-    $match = @($sums -split "`n" | Where-Object { $_.Trim() -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($fileName) + '$') })
-    if ($match.Count -ne 1) { throw 'Missing or ambiguous release checksum' }
-    $expected = ($match[0].Trim() -split '\s+')[0]
+    # GitHub serves SHA256SUMS.txt as application/octet-stream on Windows PowerShell 5.1.
+    # Invoke-WebRequest .Content can be byte[] rather than text; always read from disk.
+    $sumsFile = Join-Path $temp 'release-sha256sums.txt'
+    Invoke-WebRequest -UseBasicParsing -Uri $sumsUrl -OutFile $sumsFile
+    $entries = @([IO.File]::ReadAllLines($sumsFile) | Where-Object { $_.Trim() -match ('^[a-fA-F0-9]{64}\s+\*?' + [regex]::Escape($fileName) + '$') })
+    if ($entries.Count -ne 1) { throw "Missing or ambiguous release checksum for $fileName" }
+    $expected = ($entries[0].Trim() -split '\s+')[0]
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash -ine $expected) { throw 'Checksum mismatch; installation refused' }
     return $file
 }
@@ -21,7 +24,14 @@ try {
     $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
     $node = if ($nodeCommand) { $nodeCommand.Source } else { $null }
     $supported = $false
-    if ($node) { & $node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=12)?0:1)'; $supported = $LASTEXITCODE -eq 0 }
+    if ($node) {
+        # Avoid passing JavaScript quotes through Windows PowerShell / Git Bash / cmd.exe.
+        $versionText = (& $node --version).Trim()
+        if ($LASTEXITCODE -eq 0 -and $versionText -match '^v([0-9]+)\.([0-9]+)\.') {
+            $major = [int]$Matches[1]; $minor = [int]$Matches[2]
+            $supported = $major -gt 22 -or ($major -eq 22 -and $minor -ge 12)
+        }
+    }
     if (-not $supported -or $env:DV_FORCE_MANAGED_NODE -eq '1') {
         $node = Join-Path $tools 'node/node.exe'
         if (-not (Test-Path -LiteralPath $node)) {

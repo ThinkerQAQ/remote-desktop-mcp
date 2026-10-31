@@ -20,16 +20,25 @@
 
 ## 验证边界
 
-发布流程在 Linux/Windows、Node 22/24 下运行单元测试和真实上游只读 MCP smoke。配置生成及 POSIX 权限只适用于 Linux/WSL。本次发布不迁移正在运行的 DV 服务，不创建第二条 ChatGPT 连接。本地 smoke 不能证明远程注册、全部工具正确或安全隔离成立。
+发布流程在 Linux/Windows/macOS、Node 22/24 下验证原生安装、私有配置、单元测试和真实上游只读 MCP smoke。Linux 验证 POSIX 权限，Windows 采用当前用户专属 ACL；常驻进程分别由 Linux systemd 用户服务、macOS LaunchAgent、Windows 当前用户计划任务管理。本次发布不迁移正在运行的 DV 服务，不创建第二条 ChatGPT 连接。本地 smoke 不能证明远程注册、全部工具正确或安全隔离成立。
 
 ## 依赖审计
 
-2026-10-31 使用 npm 官方源执行 `npm audit --omit=dev --registry=https://registry.npmjs.org`。升级 smol-toml 至 1.9.1、glob 至兼容的 10.5.0 后，仍有 **13 个包级告警：2 高危、11 中危、0 严重**。统计包含向父包传播的告警，不代表已验证了 13 个独立漏洞。
+2026-10-31 通过 `npm run audit:high` 调用 npm 官方源，对生产依赖审计结果为**高危 0、严重 0、中危 12**（包级告警）。已将 Desktop Commander 升级到 0.3.1、MCP SDK 升级到 1.32.2，并以锁定版本覆盖原上游依赖的 Zod 3 为 Zod 4.6.7。由于跨主版本，增加了带版本保护的兼容性补丁；CI 同时验证 schema、默认值、record 转换、PDF 预处理及真实上游 MCP 初始化、工具调用。
 
-剩余高危来自上游使用的 Zod 3（[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)），npm 同时把 Desktop Commander 父包标为高危。强行覆盖到 Zod 4 会跨越声明的 API 主版本，因此未采用。glob/minimatch/uuid 及其父级文档、归档、路径依赖仍有中危告警。未完成全面可达性分析或漏洞复现；单元测试和 smoke 通过不等于依赖安全。后续跟踪上游修复，扩大部署前重新审计；仅在隔离账户或环境中处理可信请求。
+兼容性补丁存在后续维护风险，上游版本变化时必须重新验证。CI 无法正常审计或发现高危／严重告警会失败。文档、归档、路径相关的中危依赖仍需跟踪；本地测试通过不等于完整安全审计。建议隔离操作系统权限，跟进上游修复。
 
-## v0.2 向导验证
+## v0.2/v0.3 向导验证
 
 新增私有依赖引导安装、隐藏密钥输入、私有配置、独立服务或后台进程管理及恢复命令。干净临时目录测试实际下载官方 Node 24.21.0 和 tunnel-client 0.0.16、核对校验和、安装锁定依赖，并使用合成凭据在只配置模式完成真实上游 MCP 只读测试；没有连接真实账户隧道。
 
 八项自动化测试覆盖传输、参数校验、端口冲突、私有文件及符号链接、重复配置保留凭据、真实本地 MCP、独立模拟隧道就绪及后台停止。另外用合成 HTTP 隧道单独验证 systemd 启动、停止和重启，项目路径包含空格、美元及百分号。上述测试不证明真实账户注册或远程 ChatGPT 工具调用。Windows CI 验证 PowerShell 入口语法及本地 stdio，当前环境未实测 Windows→WSL 安装。
+
+## v0.3 三平台原生配置范围
+
+- Linux（包括 WSL2）：优先使用 systemd 用户服务，不可用则退回后台模式，不迁移现有 DV 服务或凭据。
+- macOS：原生终端自动检查依赖并校验下载，采用项目专属 LaunchAgent（需要用户登录环境）。
+- Windows：原生 PowerShell 自动检查依赖并校验下载，当前用户 ACL 保存私有文件，采用项目专属计划任务；无需 WSL。
+- GitHub Actions 在三个系统的 Node 22/24 环境以合成凭据及模拟本地隧道检查安装与运行。不等于对所有用户电脑、真实 ChatGPT 注册和远程 MCP 调用完成验收。CI 不保存真实 Tunnel ID 或密钥。
+
+首次安装入口锁定 v0.3.0；重复运行复用本地现有安装，不暗中升级。用户仍需自行创建 Tunnel ID 和运行密钥，并在 ChatGPT 完成自定义 MCP 注册。
