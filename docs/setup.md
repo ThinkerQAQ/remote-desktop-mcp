@@ -37,4 +37,4 @@ No new connection is needed per tool call. Retain the same process/session where
 - Exit/restart loop: check versions, environment availability and absolute paths locally. Adapter stderr deliberately omits upstream diagnostics, which can contain local data. Run upstream directly in a trusted local terminal if needed.
 - No response after startup: generated config enables `stdio_send_initialized_notification`; keep it enabled for the tested tunnel-client version.
 - Unexpected tool permissions: inspect upstream settings and OS account access. This transport has no tool allowlist and does not enforce a shell sandbox.
-- Native Windows: local stdio is supported; run persistent tunnel deployment in WSL2 for this release. Avoid PowerShell-specific quoting in a Linux service.
+- Native Windows: run `./setup.ps1` for a native persistent tunnel managed by a per-user Scheduled Task; WSL2 is optional.

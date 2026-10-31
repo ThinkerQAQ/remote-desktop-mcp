@@ -6,8 +6,8 @@ This repository contains original integration code. It does not vendor Desktop C
 
 | Component | License | Role |
 | --- | --- | --- |
-| @wonderwhy-er/desktop-commander 0.3.0 | MIT | MCP tool engine |
-| @modelcontextprotocol/sdk 1.32.1 | MIT | Read-only smoke client |
+| @wonderwhy-er/desktop-commander 0.3.1 | MIT | MCP tool engine |
+| @modelcontextprotocol/sdk 1.32.2 | MIT | Read-only smoke client |
 | smol-toml 1.9.1 | BSD-3-Clause | TOML parser |
 | openai/tunnel-client (separate install; tested 0.0.16) | Apache-2.0 | Persistent remote transport |
 

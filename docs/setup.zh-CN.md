@@ -37,4 +37,4 @@ systemd 可参考 `systemd.service.example`，填写项目、tunnel-client、Nod
 - 循环重启：在本地核对版本、环境变量及绝对路径。适配器不转发可能包含本地数据的上游 stderr；必要时在可信本地终端直接运行上游诊断。
 - 初始化后无响应：生成配置启用了 `stdio_send_initialized_notification`，已验证的 tunnel-client 版本应保留此项。
 - 工具权限超预期：检查上游配置及操作系统账户权限，本传输层没有工具白名单，也不隔离 shell。
-- 原生 Windows：本版本支持本地 stdio，常驻隧道在 WSL2 中部署。不要将 PowerShell 引号语法用于 Linux 服务。
+- 原生 Windows：优先使用 `./setup.ps1` 安装原生隧道，系统采用当前用户计划任务管理；WSL2 是可选部署方式，不是必要条件。

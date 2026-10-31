@@ -4,17 +4,18 @@ umask 077
 SETUP_KEY="${DV_RUNTIME_API_KEY:-}"
 unset DV_RUNTIME_API_KEY
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-case "$(uname -s)" in Linux) ;; *) echo 'Use Linux/WSL2. Windows: powershell -File setup.ps1' >&2; exit 1;; esac
+case "$(uname -s)" in Linux) PLATFORM=linux;; Darwin) PLATFORM=darwin;; *) echo 'Windows: powershell -File setup.ps1' >&2; exit 1;; esac
 case "$(uname -m)" in x86_64) ARCH=x64; TARCH=amd64;; aarch64|arm64) ARCH=arm64; TARCH=arm64;; *) echo 'Unsupported CPU architecture' >&2; exit 1;; esac
 
 missing=()
-for tool in curl tar sha256sum unzip xz; do command -v "$tool" >/dev/null || missing+=("$tool"); done
+for tool in curl tar unzip; do command -v "$tool" >/dev/null || missing+=("$tool"); done
+if ! command -v sha256sum >/dev/null && ! command -v shasum >/dev/null; then missing+=(sha256); fi
 if ((${#missing[@]})); then
   echo 'Installing prerequisite utilities / 正在安装基础工具'
-  if command -v apt-get >/dev/null; then
-    if ((EUID == 0)); then apt-get update; apt-get install -y curl ca-certificates tar coreutils unzip xz-utils
-    else sudo apt-get update; sudo apt-get install -y curl ca-certificates tar coreutils unzip xz-utils; fi
-  else echo 'Install curl, tar, sha256sum, unzip and xz using your package manager, then rerun.' >&2; exit 1; fi
+  if [[ "$PLATFORM" == linux ]] && command -v apt-get >/dev/null; then
+    if ((EUID == 0)); then apt-get update; apt-get install -y curl ca-certificates tar coreutils unzip
+    else sudo apt-get update; sudo apt-get install -y curl ca-certificates tar coreutils unzip; fi
+  else echo 'Install curl, tar, sha256sum (or shasum) and unzip using your package manager, then rerun.' >&2; exit 1; fi
 fi
 TOOLS="$ROOT/runtime/tools"
 mkdir -p "$TOOLS"
@@ -25,7 +26,9 @@ verify() {
   local archive="$1" sums="$2" expected
   expected="$(awk -v file="$(basename "$archive")" '$2 == file || $2 == "*"file {print $1}' "$sums")"
   [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]] || { echo 'Missing/ambiguous checksum' >&2; exit 1; }
-  printf '%s  %s\n' "$expected" "$archive" | sha256sum --check --status || { echo 'Checksum mismatch; refusing to install' >&2; exit 1; }
+  local actual
+  if command -v sha256sum >/dev/null; then actual="$(sha256sum "$archive" | awk '{print $1}')"; else actual="$(shasum -a 256 "$archive" | awk '{print $1}')"; fi
+  [[ "$actual" == "$expected" ]] || { echo 'Checksum mismatch; refusing to install' >&2; exit 1; }
 }
 
 NODE="$(command -v node || true)"
@@ -33,13 +36,13 @@ if [[ "${DV_FORCE_MANAGED_NODE:-0}" == 1 ]] || [[ -z "$NODE" ]] || ! "$NODE" -e 
   NODE="$TOOLS/node/bin/node"
   if [[ ! -x "$NODE" ]]; then
     VERSION=v24.21.0
-    FILE="node-$VERSION-linux-$ARCH.tar.xz"
+    FILE="node-$VERSION-$PLATFORM-$ARCH.tar.gz"
     echo "Installing verified Node.js $VERSION / 安装 Node.js"
     download "https://nodejs.org/dist/$VERSION/$FILE" "$TMP/$FILE"
     download "https://nodejs.org/dist/$VERSION/SHASUMS256.txt" "$TMP/node-sums"
     verify "$TMP/$FILE" "$TMP/node-sums"
-    tar -xJf "$TMP/$FILE" -C "$TMP"
-    mv "$TMP/node-$VERSION-linux-$ARCH" "$TOOLS/node"
+    tar -xzf "$TMP/$FILE" -C "$TMP"
+    mv "$TMP/node-$VERSION-$PLATFORM-$ARCH" "$TOOLS/node"
   fi
 fi
 export PATH="$(dirname "$NODE"):$PATH"
@@ -51,7 +54,7 @@ if [[ "${DV_FORCE_MANAGED_TUNNEL:-0}" == 1 || -z "$TUNNEL" ]]; then
   TUNNEL="$TOOLS/tunnel/tunnel-client"
   if [[ ! -x "$TUNNEL" ]]; then
     VERSION=v0.0.16
-    FILE="tunnel-client-$VERSION-linux-$TARCH.zip"
+    FILE="tunnel-client-$VERSION-$PLATFORM-$TARCH.zip"
     BASE="https://github.com/openai/tunnel-client/releases/download/$VERSION"
     echo "Installing verified tunnel-client $VERSION / 安装 tunnel-client"
     download "$BASE/$FILE" "$TMP/$FILE"

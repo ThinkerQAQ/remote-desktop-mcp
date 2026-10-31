@@ -1,6 +1,7 @@
+import { isDirectExecution } from './entrypoint.mjs';
+import { prepareUpstream } from './patch-upstream.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { pathToFileURL } from 'node:url';
 import { once } from 'node:events';
 import { keepMessage, loadConfig, upstream } from './config.mjs';
 
@@ -32,7 +33,7 @@ export async function relay(command, args, { input = process.stdin, output = pro
     for (const s of signals) process.off(s, stop);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { process.exitCode = await relay(process.execPath, [upstream], { filter: loadConfig().mcp?.filter_log_notifications ?? true }); }
+if (isDirectExecution(import.meta.url)) {
+  try { prepareUpstream(); process.exitCode = await relay(process.execPath, [upstream], { filter: loadConfig().mcp?.filter_log_notifications ?? true }); }
   catch { process.stderr.write('DV: transport failed; check local installation/configuration\n'); process.exitCode = 1; }
 }

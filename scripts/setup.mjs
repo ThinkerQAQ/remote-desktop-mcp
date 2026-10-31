@@ -1,13 +1,13 @@
+import { isDirectExecution } from './entrypoint.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
-import { pathToFileURL } from 'node:url';
 import { root, tunnelConfig } from './config.mjs';
 import { privateDir, privateWrite, readPrivateJSON } from './private-files.mjs';
-import { systemdAvailable, start, status, ownedProcess } from './runtime.mjs';
+import { defaultManager, start, stop, status } from './runtime.mjs';
 
 export function validateInput(id, key) {
   if (!/^tunnel_[A-Za-z0-9_-]+$/.test(id)) throw new Error('Invalid Tunnel ID / Tunnel ID 格式错误');
@@ -21,7 +21,7 @@ export async function freePort(preferred) {
   });
 }
 async function setup() {
-  if (process.platform !== 'linux') throw new Error('Use setup.ps1 to configure this project inside WSL2');
+
   const flags = new Set(process.argv.slice(2));
   for (const f of flags) if (!['--non-interactive', '--configure-only', '--background'].includes(f)) throw new Error('Unknown setup option');
   const nonInteractive = flags.has('--non-interactive');
@@ -46,24 +46,27 @@ async function setup() {
     }
     validateInput(id, apiKey);
     const tunnel = process.env.DV_TUNNEL_CLIENT || saved.tunnel;
-    if (!tunnel || !path.isAbsolute(tunnel) || spawnSync(tunnel, ['--version'], { stdio: 'ignore', timeout: 10000 }).status !== 0) throw new Error('Run bash setup.sh to install tunnel-client first');
+    const tunnelArgs = process.env.DV_TUNNEL_ARGS_JSON ? JSON.parse(process.env.DV_TUNNEL_ARGS_JSON) : (saved.tunnelArgs || []);
+    if (!Array.isArray(tunnelArgs) || tunnelArgs.some(v => typeof v !== 'string')) throw new Error('Invalid tunnel arguments');
+    if (!tunnel || !path.isAbsolute(tunnel) || spawnSync(tunnel, [...tunnelArgs, '--version'], { stdio: 'ignore', timeout: 10000 }).status !== 0) throw new Error('Run setup.sh (Linux/macOS) or setup.ps1 (Windows) first');
     console.log('Checking local MCP / 验证本地 MCP…');
     const smokeEnv = { ...process.env }; delete smokeEnv.DV_RUNTIME_API_KEY; delete smokeEnv.OPENAI_API_KEY; delete smokeEnv.DV_CONFIG;
     const smoke = spawnSync(process.execPath, [path.join(root, 'scripts/smoke.mjs')], { env: smokeEnv, stdio: 'pipe', timeout: 90000 });
     if (smoke.status !== 0) throw new Error('Local MCP smoke failed; existing configuration was not changed');
-    const active = saved.manager && (saved.manager === 'systemd' ? (await status()).managed_process_running : Boolean(ownedProcess()));
+    const active = saved.manager && (await status()).managed_process_running;
     const port = active ? saved.port : await freePort(saved.port || 18832);
     if (flags.has('--background') && saved.manager && saved.manager !== 'background') throw new Error('Existing setup uses systemd; keep its deployment mode');
-    const manager = saved.manager || (flags.has('--background') ? 'background' : (systemdAvailable() ? 'systemd' : 'background'));
+    const manager = saved.manager || (flags.has('--background') ? 'background' : defaultManager());
     if (active && manager === 'background' && (id !== saved.id || tunnel !== saved.tunnel || apiKey !== readPrivateJSON(credentials).apiKey)) throw new Error('Stop the managed runtime before changing its configuration: npm run stop');
     const config = { mcp: { filter_log_notifications: true }, tunnel: { id, api_key_env: 'OPENAI_API_KEY', health_port: port } };
     const toml = `[mcp]\nfilter_log_notifications = true\n\n[tunnel]\nid = ${JSON.stringify(id)}\napi_key_env = "OPENAI_API_KEY"\nhealth_port = ${port}\n`;
     const configFile = path.join(root, 'config.toml');
     if (fs.existsSync(configFile) && !saved.id) throw new Error('Existing config.toml was not created by this wizard. Move it aside or migrate it explicitly first.');
+    if (active && manager !== 'background') await stop();
     privateWrite(configFile, toml);
     privateWrite(credentials, JSON.stringify({ apiKey }));
     privateWrite(path.join(dir, 'tunnel.yaml'), JSON.stringify(tunnelConfig(config), null, 2));
-    privateWrite(stateFile, JSON.stringify({ id, tunnel, port, manager }));
+    privateWrite(stateFile, JSON.stringify({ id, tunnel, tunnelArgs, port, manager }));
     console.log('Local MCP passed; private configuration saved / 本地 MCP 通过，私有配置已保存。');
     if (flags.has('--configure-only')) {
       console.log('Runtime not started (--configure-only). ChatGPT registration: pending / 未启动隧道，MCP 注册待完成。'); return;
@@ -78,9 +81,9 @@ async function setup() {
     if (!ready) throw new Error('Tunnel is not ready. Configuration is retained. Check credentials/account access and run npm run status, then rerun setup.');
     console.log('Next / 最后一步：ChatGPT Settings → Connectors/Apps → add custom MCP → Tunnel → use your saved Tunnel ID. Verify tools/list and read-only list_sessions.\nhttps://chatgpt.com/#settings/Connectors');
     if (manager === 'background') console.log('Background mode does not restart after reboot/logout. Run bash setup.sh again to restore. / 后台模式不会在重启或注销后自动恢复，重新运行向导即可恢复。');
-    else console.log('User service installed. WSL2 must stay running; logout persistence depends on systemd lingering. / 已安装用户服务；WSL2 须保持运行，注销后常驻取决于 lingering。');
+    else console.log('User startup configured / 已配置当前用户启动。macOS/Windows resume at login; Linux logout persistence depends on lingering.');
   } finally { muted = false; rl?.close(); }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isDirectExecution(import.meta.url)) {
   try { await setup(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

@@ -8,6 +8,6 @@ Only configuration examples, adapter source and synthetic tests belong in Git. N
 
 MCP requests/results may transmit files, command output and metadata to the connected AI platform. The adapter filters low-level log notifications and discards upstream stderr; it does not redact tool results or warning/error notifications. Do not use it to make confidential output safe for publication. Desktop Commander's telemetry and history are upstream behavior; review its own configuration and policy.
 
-Keep tunnel health/admin listeners on loopback. Store private environment and generated configuration files as 0600, parent directories as 0700. Never expose a raw stdio bridge or an unauthenticated network listener. Use official tunnel-client distribution and account controls. Authorization and connection health are separate concerns.
+Keep tunnel health/admin listeners on loopback. Store private environment and generated configuration files as 0600 and parent directories as 0700 on POSIX; Windows uses an explicit current-user-only ACL. Never expose a raw stdio bridge or an unauthenticated network listener. Use official tunnel-client distribution and account controls. Authorization and connection health are separate concerns.
 
 Report vulnerabilities privately using GitHub private vulnerability reporting if enabled, or contact **contact@thinkerqaq.com**. Do not include live credentials or private command output in a public issue. Rotate any exposed credential before sharing a sanitized report.

@@ -4,11 +4,25 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
-import { privateWrite } from '../scripts/private-files.mjs';
+import { privateWrite, privateDir } from '../scripts/private-files.mjs';
 import { unitQuote } from '../scripts/runtime.mjs';
+import { isDirectExecution } from '../scripts/entrypoint.mjs';
+import { pathToFileURL } from 'node:url';
+
+test('entrypoint recognizes real path and symlink aliases (macOS /var and /private/var)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-entrypoint-'));
+  try {
+    const source = path.join(root, 'scripts/setup.mjs');
+    const alias = path.join(dir, 'entrypoint-alias.mjs');
+    fs.symlinkSync(source, alias);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, alias), true);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, source), true);
+    assert.equal(isDirectExecution(pathToFileURL(source).href, path.join(root, 'scripts/runtime.mjs')), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('reject missing/multiline credentials and malformed tunnel identity', () => {
   assert.throws(() => validateInput('bad', 'key'));
@@ -24,6 +38,20 @@ test('occupied preferred port chooses another loopback port', async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try { assert.notEqual(await freePort(server.address().port), server.address().port); }
   finally { server.close(); }
+});
+
+test('Windows private directories/files have explicit current-user-only ACLs', { skip: process.platform !== 'win32' }, () => {
+  const dir = path.join(os.tmpdir(), 'dv-private-acl-' + Date.now() + '-' + process.pid);
+  const file = path.join(dir, 'credential.json');
+  try {
+    privateDir(dir);
+    privateWrite(file, '{"synthetic":true}');
+    const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $id) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
+    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file }, encoding: 'utf8', windowsHide: true });
+    assert.equal(check.status, 0, 'Windows ACL verification failed');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('private writes enforce permissions and refuse symlinks', { skip: process.platform === 'win32' }, () => {
@@ -45,7 +73,7 @@ function run(command, args, env) {
     child.on('error', reject); child.on('close', code => { clearTimeout(timer); resolve({ code, output }); });
   });
 }
-test('wizard runs real local smoke, retains credentials on rerun, starts/stops isolated mock tunnel', { skip: process.platform !== 'linux', timeout: 120000 }, async () => {
+for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && process.platform === 'linux' }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-wizard-'));
   let started = false;
   const env = { ...process.env, DV_TUNNEL_ID: 'tunnel_EXAMPLE', DV_RUNTIME_API_KEY: 'synthetic-secret-do-not-print' };
@@ -53,18 +81,19 @@ test('wizard runs real local smoke, retains credentials on rerun, starts/stops i
   try {
     fs.cpSync(path.join(root, 'scripts'), path.join(dir, 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(root, 'config.example.toml'), path.join(dir, 'config.example.toml'));
-    fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+    fs.symlinkSync(path.join(root, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
     fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-    const mock = path.join(dir, 'mock-tunnel');
+    const mock = path.join(dir, 'mock-tunnel.mjs');
     fs.writeFileSync(mock, `#!${process.execPath}\nimport fs from 'node:fs';import http from 'node:http';\nif(process.argv.includes('--version')) console.log('mock');else {const c=JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf('--config')+1]));const p=Number(c.health.listen_addr.split(':').at(-1));http.createServer((q,r)=>{r.end('ok');}).listen(p,'127.0.0.1');}\n`, { mode: 0o700 });
-    env.DV_TUNNEL_CLIENT = mock;
-    const args = [path.join(dir, 'scripts/setup.mjs'), '--non-interactive', '--background'];
+    env.DV_TUNNEL_CLIENT = process.execPath;
+    env.DV_TUNNEL_ARGS_JSON = JSON.stringify([mock]);
+    const args = [path.join(dir, 'scripts/setup.mjs'), '--non-interactive', ...(native ? [] : ['--background'])];
     let result = await run(process.execPath, [...args, '--configure-only'], env);
     assert.equal(result.code, 0, result.output);
     assert.ok(!result.output.includes(env.DV_RUNTIME_API_KEY));
-    assert.ok(result.output.includes('not started'));
+    assert.match(result.output, /not started/i);
     const credentials = path.join(dir, 'runtime/credentials.json');
-    assert.equal(fs.statSync(credentials).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(credentials).mode & 0o777, 0o600);
     assert.equal(JSON.parse(fs.readFileSync(credentials)).apiKey, env.DV_RUNTIME_API_KEY);
     const reused = { ...env }; delete reused.DV_RUNTIME_API_KEY; delete reused.DV_TUNNEL_ID;
     result = await run(process.execPath, args, reused); started = true;
@@ -78,7 +107,16 @@ test('wizard runs real local smoke, retains credentials on rerun, starts/stops i
     assert.equal(result.code, 0, result.output);
   } finally {
     if (started) await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'stop'], env);
-    await new Promise(resolve => setTimeout(resolve, 200));
+    if (native && process.platform === 'win32') {
+      const { createHash } = await import('node:crypto');
+      const name = 'remote-desktop-mcp-' + createHash('sha256').update(dir).digest('hex').slice(0, 10);
+      await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Unregister-ScheduledTask -TaskName '${name}' -Confirm:$false -ErrorAction SilentlyContinue`], env);
+    }
+    if (native && process.platform === 'darwin') {
+      const { createHash } = await import('node:crypto');
+      fs.rmSync(path.join(os.homedir(), 'Library/LaunchAgents', 'remote-desktop-mcp-' + createHash('sha256').update(dir).digest('hex').slice(0, 10) + '.plist'), { force: true });
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

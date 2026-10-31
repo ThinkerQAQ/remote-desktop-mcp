@@ -8,7 +8,7 @@ if [[ ! -f "$DEST/setup.sh" ]]; then
   TMP="$(mktemp -d)"
   trap 'rm -rf -- "$TMP"' EXIT
   curl --fail --location --silent --show-error --retry 2 --connect-timeout 15 --max-time 180 \
-    https://github.com/ThinkerQAQ/remote-desktop-mcp/archive/refs/tags/v0.2.0.tar.gz -o "$TMP/source.tar.gz"
+    https://github.com/ThinkerQAQ/remote-desktop-mcp/archive/refs/tags/v0.3.0.tar.gz -o "$TMP/source.tar.gz"
   mkdir "$TMP/source"
   tar -xzf "$TMP/source.tar.gz" --strip-components=1 -C "$TMP/source"
   mkdir -p "$(dirname "$DEST")"
