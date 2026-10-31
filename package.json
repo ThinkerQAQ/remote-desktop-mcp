@@ -1,6 +1,6 @@
 {
   "name": "remote-desktop-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Persistent Desktop Commander stdio integration for OpenAI tunnel-client",
@@ -13,8 +13,12 @@
     "doctor": "node scripts/cli.mjs doctor",
     "tunnel-config": "node scripts/cli.mjs tunnel-config",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check scripts/proxy.mjs && node --check scripts/cli.mjs && node --check scripts/config.mjs && npm test",
-    "smoke": "node scripts/smoke.mjs"
+    "check": "node --check scripts/proxy.mjs && node --check scripts/cli.mjs && node --check scripts/config.mjs && node --check scripts/setup.mjs && node --check scripts/runtime.mjs && node --check scripts/private-files.mjs && npm test",
+    "smoke": "node scripts/smoke.mjs",
+    "setup": "node scripts/setup.mjs",
+    "status": "node scripts/runtime.mjs status",
+    "start": "node scripts/runtime.mjs start",
+    "stop": "node scripts/runtime.mjs stop"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

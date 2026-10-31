@@ -2,6 +2,8 @@
 
 [简体中文](setup.zh-CN.md)
 
+
+For the recommended one-command path, see [the wizard guide](wizard.md). The steps below remain available for manual deployment.
 ## Local MCP
 
 Run the README checks first. Use the direct Node command with an absolute path in your MCP client. `DV_CONFIG` optionally selects an absolute private TOML file; otherwise the adapter loads `config.toml`, falling back to `config.example.toml`. The configuration applies to this adapter, not Desktop Commander's own settings.

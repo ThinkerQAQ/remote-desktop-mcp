@@ -3,7 +3,7 @@
 [简体中文](README_ZH.md) · [Setup](docs/setup.md) · [Security](SECURITY.md) · [Review](docs/review.md)
 
 
-> **Experimental v0.1:** upstream transitive dependency advisories remain. See the [dependency review](docs/review.md#dependency-audit) before deployment.
+> **Experimental v0.2:** upstream transitive dependency advisories remain. See the [dependency review](docs/review.md#dependency-audit) before deployment.
 Connect an AI assistant to your development machine through **Desktop Commander and the official OpenAI tunnel-client**, using a persistent stdio process. This project packages the integration used by DV; it is not a replacement implementation of Desktop Commander or a desktop screen-control application.
 
 ## Features
@@ -15,22 +15,21 @@ Connect an AI assistant to your development machine through **Desktop Commander 
 - A read-only smoke check that initializes MCP, discovers tools and calls `list_sessions` without displaying local data.
 - Linux/WSL2 persistent tunnel deployment; Windows local stdio support. CI checks both operating systems.
 
-## Quick start
-
-Requires Node.js **22.12+**, npm and Git. Python is not required.
+## One-command setup (Linux / WSL2)
 
 ```sh
-git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
-cd remote-desktop-mcp
-npm ci
-npm run check
-npm run doctor
-npm run smoke
+curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.2.0/install.sh | bash
 ```
 
-`npm run mcp` starts the stdio adapter. Configure a local MCP client to execute `node /absolute/path/to/remote-desktop-mcp/scripts/proxy.mjs` directly; npm banners must not enter a stdio protocol connection.
+Already downloaded/cloned the repository? Run `bash setup.sh`. Windows PowerShell: `./setup.ps1` (requires initialized WSL2 Ubuntu; copies source to the Linux filesystem).
 
-For remote ChatGPT access, install the official [tunnel-client](https://github.com/openai/tunnel-client), create your own tunnel, then follow [setup](docs/setup.md). Tunnel creation, account availability and ChatGPT MCP registration are separate prerequisites. A packaged skill or healthy tunnel does not prove tools have been registered or discovered.
+The wizard installs missing Node.js/tunnel-client from official distributions with SHA-256 verification, runs locked npm installation and a real read-only MCP smoke test, asks for your own Tunnel ID and hidden runtime API key, saves private configuration, starts a persistent process and checks tunnel readiness. Re-running reuses saved inputs; port conflicts select a free loopback port. No global Node or existing DV tunnel is replaced.
+
+You must create your own tunnel/runtime key and register the custom MCP in ChatGPT. The wizard prints the official account links and next steps. Registration and remote tools/call remain **pending** until you complete them; local/tunnel success is not presented as full remote acceptance. No Edge debugging setup is needed for this file/terminal integration.
+
+See [the full wizard guide](docs/wizard.md) for repeat runs, headless deployment, recovery, credentials and limitations. Source download requires curl/tar; Ubuntu/WSL can install remaining base utilities via apt (sudo may prompt). Other distributions must provide those utilities. Dependencies are installed under the checkout; upstream package install hooks may run. Upstream dependency advisories remain as disclosed above.
+
+For development: `npm ci`, `npm run check`, `npm run smoke`. For local MCP clients, execute `node /absolute/path/scripts/proxy.mjs` directly. The official [tunnel-client](https://github.com/openai/tunnel-client) is installed separately by setup; no copy is bundled in Git.
 
 ## Scope and limits
 
@@ -38,7 +37,7 @@ DV and Remote Desktop Commander overlap in file and command capabilities. DV use
 
 This adapter is **not a sandbox or an authorization layer**. It exposes upstream tools, including shell execution. Desktop Commander settings are not a substitute for OS isolation. Run under an account with only the access you intend to delegate. Requests and results sent through the tunnel can reach your AI service; “local execution” does not mean “local-only data.” Upstream telemetry/settings remain upstream behavior; this adapter does not disable them.
 
-Persistent processes reduce reconnects; they cannot remove platform authorization requirements. Terminal execution does not activate a desktop window, but commands that launch GUI programs can affect focus. Native Windows tunnel service management and automatic updates are outside v0.1.
+Persistent processes reduce reconnects; they cannot remove platform authorization requirements. Terminal execution does not activate a desktop window, but commands that launch GUI programs can affect focus. Native Windows tunnel service management and automatic updates are outside v0.2.
 
 ## Upstream and license
 
