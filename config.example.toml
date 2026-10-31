@@ -1,0 +1,11 @@
+# Private overrides belong in config.toml (never commit that file).
+# 私有配置写入 config.toml，禁止提交。
+[mcp]
+# Discard upstream info/debug MCP log notifications; preserve warnings/errors.
+filter_log_notifications = true
+
+[tunnel]
+# Set your own ID locally. No API key values are stored in generated YAML.
+id = ""
+api_key_env = "OPENAI_API_KEY"
+health_port = 18832

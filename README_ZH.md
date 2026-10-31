@@ -2,6 +2,8 @@
 
 [English](README.md) · [安装部署](docs/setup.zh-CN.md) · [安全说明](docs/security.zh-CN.md) · [代码评审](docs/review.zh-CN.md)
 
+
+> **实验性 v0.1：**上游传递依赖仍有安全告警，部署前请阅读[依赖评审](docs/review.zh-CN.md#依赖审计)。
 通过 **Desktop Commander＋官方 OpenAI tunnel-client**，让 AI 助手使用本机文件、终端和搜索工具，复用常驻的 stdio 进程。本项目整理了 DV 已经使用的集成方案；工具引擎来自 Desktop Commander，不提供桌面画面点击功能。
 
 ## 功能

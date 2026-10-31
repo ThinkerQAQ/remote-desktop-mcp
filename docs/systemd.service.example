@@ -1,0 +1,18 @@
+[Unit]
+Description=Remote Desktop MCP persistent tunnel
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/absolute/path/to/remote-desktop-mcp
+EnvironmentFile=/absolute/path/to/private/runtime.env
+Environment=PATH=/absolute/path/to/node/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/absolute/path/to/tunnel-client run --config /absolute/path/to/remote-desktop-mcp/runtime/tunnel.yaml
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
