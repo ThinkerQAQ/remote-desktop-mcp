@@ -19,7 +19,7 @@ Remote Desktop MCP 通过 [Desktop Commander](https://github.com/wonderwhy-er/De
 
 ## 2. Quick Start
 
-先完成本地 MCP 连接：安装程序、配置客户端，再调用一次只读工具，确认整条链路可用。此流程不需要 OpenAI 账号、Tunnel 或 API Key。需要从 ChatGPT 远程连接时，再按 [Case 1](#41-case-1-通过-tunnel-连接-chatgpt) 操作。
+先完成本地 MCP 连接：安装程序、配置客户端，再调用一次只读工具，确认整条链路可用。此流程不需要 OpenAI 账号、Tunnel 或 API Key。需要从 ChatGPT 远程连接时，再按 [Case 1](#41-case-1通过-tunnel-连接-chatgpt) 操作。
 
 ### 2.1. 准备运行环境
 
@@ -39,7 +39,7 @@ node --version
 npm --version
 ```
 
-未安装 Node 时先安装符合要求的版本。后面的[远程安装向导](#41-case-1-通过-tunnel-连接-chatgpt)也可以按需安装兼容的 Node 运行环境。
+未安装 Node 时先安装符合要求的版本。后面的[远程安装向导](#41-case-1通过-tunnel-连接-chatgpt)也可以按需安装兼容的 Node 运行环境。
 
 ### 2.2. 下载与安装
 
@@ -99,7 +99,7 @@ Windows 路径可以写成 `C:/tools/remote-desktop-mcp/scripts/proxy.mjs`。以
 - **客户端找不到 Node 或服务：**检查 `command`、`args` 的绝对路径；图形客户端的 PATH 可能与终端不同。在安装目录重新运行 `npm run smoke` 定位问题。
 - **客户端看不到工具或 stdio 报错：**重新连接客户端并检查 MCP 日志。stdout 专供 JSON-RPC 协议，不应写入普通调试日志。
 - **文件路径指向了另一套系统或 WSL：**检查客户端实际运行的 Node 程序和 `proxy.mjs` 路径；服务操作的是**该进程所在系统**的文件。
-- **安装目录移动后无法连接：**更新客户端中的绝对路径。如果配置过 Tunnel，还需要在新目录重新执行[远程安装向导](#41-case-1-通过-tunnel-连接-chatgpt)。
+- **安装目录移动后无法连接：**更新客户端中的绝对路径。如果配置过 Tunnel，还需要在新目录重新执行[远程安装向导](#41-case-1通过-tunnel-连接-chatgpt)。
 
 仍无法解决时，可[提交 Issue](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues)，附上脱敏错误信息，不要公开凭据、文件内容和终端历史。
 
