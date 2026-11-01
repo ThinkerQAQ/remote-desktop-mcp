@@ -1,54 +1,110 @@
-# Remote Desktop MCP（DV）
+# Remote Desktop MCP (DV)
 
-[English](README.md) · [安装部署](docs/setup.zh-CN.md) · [安全说明](docs/security.zh-CN.md) · [代码评审](docs/review.zh-CN.md)
+[English](README.md)
 
+## 项目简介
 
-> **实验性 v0.3：**npm 依赖审计高危／严重告警已清零，但仍存在上游中危告警，详见[依赖评审](docs/review.zh-CN.md#依赖审计)。
-通过 **Desktop Commander＋官方 OpenAI tunnel-client**，让 AI 助手使用本机文件、终端和搜索工具，复用常驻的 stdio 进程。本项目整理了 DV 已经使用的集成方案；工具引擎来自 Desktop Commander，不提供桌面画面点击功能。
+通过 Desktop Commander，让 MCP 客户端使用本机文件、终端会话和搜索工具。本项目提供持久 stdio 适配器、安装向导与可选 OpenAI Tunnel，适合让 AI 助手协助本机开发的用户。工具由 Desktop Commander 提供，本项目不提供桌面画面控制引擎。
 
-## 功能
+## 快速开始
 
-- 复用 Desktop Commander 的文件、终端会话、搜索和文档能力。
-- 小型 stdio 适配器过滤 info/debug 日志通知及非协议 stdout，保留响应、错误、进度及更高级别通知。
-- 上游进程失败会向常驻服务传递退出状态，移除 shell 管道和 jq 依赖。
-- 私有 TOML 配置；健康检查仅监听回环地址；生成的隧道配置通过环境变量引用凭据。
-- 只读验收：初始化 MCP、发现工具并调用 `list_sessions`，不输出本机会话数据。
-- Linux、macOS、Windows 三平台原生常驻隧道配置，通过当前用户的服务管理器维护；CI 覆盖三个系统及 Node 22/24。
+### 1. 前置条件
 
-## 一键配置（Linux / macOS / Windows）
+Windows PowerShell、Linux 或 macOS；Node.js **22.12+**、npm 和 Git。Windows 原生运行，不要求 WSL。首次安装需要访问 npm。使用本地 stdio 不需要浏览器调试、Tunnel 或凭据。
 
-Linux、WSL2、macOS 终端：
+### 2. 安装
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.sh | bash
+git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
+cd remote-desktop-mcp
+npm ci
+npm run check
 ```
 
-**Windows 原生 PowerShell**（不要求安装 WSL2）：
+### 3. 配置并启动 MCP 客户端
+
+默认配置即可运行，无需创建 `config.toml`。在支持本地 stdio MCP 的客户端中添加服务器，将绝对路径替换为实际位置。Windows 可写成 `C:/tools/remote-desktop-mcp/scripts/proxy.mjs`。以下是常见客户端配置格式，填入所用客户端的 MCP 服务器设置。
+
+```json
+{
+  "mcpServers": {
+    "desktop": {
+      "command": "node",
+      "args": ["/absolute/path/remote-desktop-mcp/scripts/proxy.mjs"]
+    }
+  }
+}
+```
+
+重新连接或重启客户端，由客户端启动服务进程，不需要在同一客户端终端额外运行 `npm run mcp`。排查协议问题时，`npm run mcp` 可单独启动同一个 stdio 服务并等待 MCP 消息。
+
+### 4. 完成一次操作
+
+让客户端调用 `list_sessions`。验收标准：工具列表中存在该工具，调用返回有效结果；新机器返回空会话列表也是正常结果。这覆盖客户端 → 适配器 → Desktop Commander 的完整链路，无需读取文件或执行命令。
+
+也可以在仓库中独立验证本地协议流程：
+
+```sh
+npm run smoke
+```
+
+该检查必须完成初始化、工具发现和真实 `list_sessions` 调用，并以退出码 0 结束。它不代表远程 ChatGPT 连接已经验收。
+
+### 5. 常见问题
+
+- **客户端找不到 Node：**将 `command` 改为 Node 可执行文件的绝对路径；图形客户端的 PATH 可能不同。
+- **没有工具或 stdio 出错：**重跑 `npm ci`、`npm run check`、`npm run smoke`，检查 stderr，不要向协议 stdout 输出日志。
+- **Tunnel 就绪但没有工具：**刷新已注册的 MCP 连接并新建聊天，实际调用 `list_sessions`；仅看 Tunnel 状态不够。
+- **移动目录后无法启动：**在固定目录重跑安装向导，重新生成启动路径。同一 Tunnel 不要启动两个 runtime。
+
+## 配置说明
+
+可选覆盖配置写入仓库中被 Git 忽略的 `config.toml`，以 [config.example.toml](config.example.toml) 为准。本地 stdio 没有必填配置。
+
+```toml
+[mcp]
+filter_log_notifications = true
+```
+
+远程连接使用自己的 `[tunnel].id`；`api_key_env` 默认 `OPENAI_API_KEY`，`health_port` 默认 `18832`。生成的 Tunnel YAML 引用环境变量，不内嵌密钥。向导负责私有凭据存储，不要将密钥放入 Git 或聊天。
+
+## 可选功能
+
+### 持久远程连接
+
+本地 stdio 是最短路径。如果从其他机器上的 ChatGPT 连接，还需要自己的 OpenAI Tunnel / 工作区权限及 runtime 凭据。在仓库目录运行：
+
+```sh
+# Linux / macOS
+bash setup.sh
+```
 
 ```powershell
-irm https://raw.githubusercontent.com/ThinkerQAQ/remote-desktop-mcp/v0.3.1/install.ps1 | iex
+# Windows 原生 PowerShell
+.\setup.ps1
 ```
 
-还可下载 [v0.3.1 Windows／Linux／macOS 对应发行包](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/tag/v0.3.1)，根据 `SHA256SUMS` 验证下载文件的 SHA-256；下方引导脚本也会自动校验发行包。
+向导安装缺失的受支持依赖，隐藏输入 runtime 密钥，保存自己的 Tunnel ID、配置持久启动，并显示注册步骤。按账户支持情况，在 ChatGPT 完成「Add custom MCP server → Tunnel」，启用连接、新建聊天并调用 `list_sessions`。该调用成功才算远程接入验收完成；安装程序不能代替账户授权。
 
-已克隆仓库：Linux/macOS 执行 `bash setup.sh`；Windows PowerShell 执行 `./setup.ps1`。安装器首次获取固定版本 v0.3.1 的源码，重复运行复用已有安装。
+Linux 优先使用用户 systemd，否则后台运行；macOS 使用用户 LaunchAgent；Windows 使用用户 Scheduled Task。Unix 引导安装需要 curl/tar，安装基础依赖可能需要包管理权限。这些服务不能保证关机时可用。
 
-向导会自动补齐 Node.js/tunnel-client（官方分发、SHA-256 校验），安装锁定的 npm 依赖，执行真实只读 MCP 测试，然后收集你自己的 Tunnel ID 和运行密钥（隐藏输入），保存私有配置、启动常驻进程并检查隧道就绪。重复运行可保留已保存值；端口冲突时自动换用空闲回环端口。不替换全局 Node 或现有 DV 隧道。
+配置后，在仓库目录运行 `npm run status`、`npm start`、`npm stop` 查看或管理进程。重跑向导会复用配置。官方 tunnel-client 单独安装，不复制其源码；升级需要主动更新源码或安装包。
 
-用户仍需创建自己的隧道和运行密钥，并在 ChatGPT 注册自定义 MCP。向导会给出官方入口和下一步；完成前将远程注册与调用明确标为**待完成**，不会把本地或隧道成功当作远程全链路验收。这个文件/终端集成无需开启 Edge 调试。
+## 开发与验证
 
-详细参数、重复运行、无人值守配置、恢复及边界见[向导说明](docs/wizard.zh-CN.md)。Linux/macOS 下载源码需要 curl/tar；Ubuntu/WSL 会通过 apt 补齐其他基础工具（sudo 可能提示）；其他发行版和 macOS 需提前安装必要基础工具。Windows 使用当前用户计划任务，macOS 使用 LaunchAgent，Linux 优先使用 systemd 用户服务。运行依赖保存在项目下，npm 安装可能执行上游安装钩子。剩余中危告警按上文披露。
+CI 在 Linux、Windows、macOS 上覆盖 Node 22/24。
 
-开发验证使用 `npm ci`、`npm run check`、`npm run smoke`。本地 MCP 客户端直接执行 `node /项目绝对路径/scripts/proxy.mjs`。官方 [tunnel-client](https://github.com/openai/tunnel-client) 由向导另行安装，Git 中不内嵌其二进制。
+```sh
+npm ci
+npm run check
+npm run smoke
+npm run audit:high
+```
 
-## 定位与边界
+`check` 执行上游兼容补丁与单元测试；`smoke` 验证真实本地 MCP。CI 使用模拟凭据检查原生安装，不代表你的远程账户授权或真实重启已经通过。上游仍可能存在中危依赖公告，高危和严重问题由检查阻止。使用功能分支、PR、Squash Merge，合并后删除分支。
 
-DV 与 Remote Desktop Commander 的文件、命令能力重叠。DV 由自己部署 tunnel-client；Remote Desktop Commander 使用其自身的远程服务和设备选择。本项目提供可复现部署和传输验证，工具引擎继续使用上游，也不提供自主运行的 Agent。
+## 许可证与合规
 
-适配器**不提供沙箱或授权隔离**，上游工具包含 shell 执行；Desktop Commander 配置不能替代操作系统隔离。建议使用只拥有预期权限的独立账户。经隧道发出的请求和结果可能到达 AI 服务，本地执行不代表数据只留在本地。上游遥测和设置仍由上游控制，本适配器未关闭它们。
+集成代码采用 [Apache-2.0](LICENSE)。Desktop Commander 采用 MIT；单独安装的 OpenAI tunnel-client 采用 Apache-2.0。分发时保留[第三方声明](THIRD_PARTY_NOTICES.md)。
 
-长连接能减少重连，无法取消平台授权。终端执行本身不激活窗口，但启动 GUI 的命令可能影响焦点。原生 Windows 计划任务和 macOS LaunchAgent 已纳入管理，但不提供源码自动升级。
-
-## 上游与许可证
-
-集成代码采用 Apache-2.0。[Desktop Commander](https://github.com/wonderwhy-er/DesktopCommanderMCP) 采用 MIT，固定版本 0.3.1；[OpenAI tunnel-client](https://github.com/openai/tunnel-client) 采用 Apache-2.0，单独安装，已验证版本 0.0.16。详见[第三方声明](THIRD_PARTY_NOTICES.md)。本项目独立维护，不是 OpenAI 或 Desktop Commander 的官方产品。
+适配器暴露上游文件和 Shell 工具，不提供操作系统沙箱或授权边界。请使用你愿意授权的系统账户运行。工具请求与结果可能传到所连接的 AI 服务；上游遥测和设置仍由上游控制。源码许可不覆盖用户文件或凭据。详见[安全说明](SECURITY.md)与[中文版](SECURITY_ZH.md)。
