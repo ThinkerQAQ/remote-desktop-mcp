@@ -1,6 +1,6 @@
 # Security
 
-[简体中文](docs/security.zh-CN.md)
+[简体中文](SECURITY_ZH.md)
 
 This is a transport/deployment adapter with the privileges of its operating-system account. It does not implement authorization, a tool allowlist or shell isolation. All upstream tools are exposed. Use a dedicated account or container/VM and grant only intended filesystem/network privileges. Upstream allowed-directory and blocked-command settings must not be treated as a comprehensive sandbox.
 
