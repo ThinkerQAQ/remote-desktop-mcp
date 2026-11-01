@@ -88,6 +88,8 @@ The wizard installs missing supported dependencies, asks for your tunnel ID and 
 
 Linux uses user systemd when available, otherwise a background process; macOS uses a user LaunchAgent; Windows uses a user Scheduled Task. Unix bootstrap needs curl/tar; installation may need package-manager permission. These are user-session services, not a guarantee of availability while the computer is off.
 
+For custom Linux service deployment, [deploy/systemd.service.example](deploy/systemd.service.example) is a machine-readable template; replace every absolute path locally. The wizard remains the standard setup path.
+
 From the configured checkout use `npm run status`, `npm start`, and `npm stop`. Rerunning setup reuses saved choices. Setup installs the official tunnel-client separately; it is not bundled source. Upgrades require an explicit source/package update.
 
 ## Development

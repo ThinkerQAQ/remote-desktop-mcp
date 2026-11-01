@@ -88,6 +88,8 @@ bash setup.sh
 
 Linux 优先使用用户 systemd，否则后台运行；macOS 使用用户 LaunchAgent；Windows 使用用户 Scheduled Task。Unix 引导安装需要 curl/tar，安装基础依赖可能需要包管理权限。这些服务不能保证关机时可用。
 
+自定义 Linux 服务部署可使用 [deploy/systemd.service.example](deploy/systemd.service.example) 机器可读模板，需在本地替换所有绝对路径。默认仍使用向导安装。
+
 配置后，在仓库目录运行 `npm run status`、`npm start`、`npm stop` 查看或管理进程。重跑向导会复用配置。官方 tunnel-client 单独安装，不复制其源码；升级需要主动更新源码或安装包。
 
 ## 开发与验证
