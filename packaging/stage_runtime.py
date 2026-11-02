@@ -96,14 +96,15 @@ def build_windows_launchers(target: Path) -> None:
     csc = win_dir / "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
     if not csc.is_file():
         raise FileNotFoundError(f"Windows .NET Framework C# compiler required for GUI launcher: {csc}")
-    source = ROOT / "packaging/assets/RemoteDesktopMCP-Launcher.cs"
     icon = target / "brand/remotedesktopmcp.ico"
     for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE")):
+        source = ROOT / "packaging/assets" / (
+            "RemoteDesktopMCP-Configure.cs" if switch == "CONFIGURE" else "RemoteDesktopMCP-Launcher.cs")
+        output = target / (name + ".exe") if switch == "MAINTENANCE" else target / "bin" / (name + ".exe")
         subprocess.run([
             str(csc), "/nologo", "/target:winexe", f"/define:{switch}",
             "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll",
-            f"/win32icon:{icon}", f"/out:{target / (name + '.exe') if switch == 'MAINTENANCE' else target / 'bin' / (name + '.exe')}",
-            str(source)
+            f"/win32icon:{icon}", f"/out:{output}", str(source)
         ], check=True)
 
 

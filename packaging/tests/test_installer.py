@@ -116,6 +116,24 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("DialogResult.Yes", gui)
         self.assertNotIn("DV_RUNTIME_API_KEY", gui)
 
+    def test_native_windows_config_has_connection_status_and_masked_key(self):
+        gui = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Configure.cs").read_text()
+        self.assertIn('SetCurrentProcessExplicitAppUserModelID', gui)
+        self.assertIn('Open ChatGPT', gui)
+        self.assertIn('https://chatgpt.com/', gui)
+        self.assertIn('https://help.openai.com/en/articles/12584461-', gui)
+        self.assertIn('UseSystemPasswordChar=true', gui)
+        self.assertIn('const string Mask = "********"', gui)
+        self.assertIn('Local Tunnel: Connected', gui)
+        self.assertIn('ChatGPT plugin: not verified', gui)
+        self.assertIn('" status"', gui)
+        self.assertIn('DV_RUNTIME_API_KEY', gui)
+        self.assertNotIn('powershell.exe', gui)
+        self.assertIn('Process.GetCurrentProcess().ProcessName', gui)
+        manager = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Launcher.cs").read_text()
+        self.assertIn('RemoteDesktopMCP-Configure.exe', manager)
+        self.assertNotIn('powershell.exe', manager)
+
     def test_refuse_runtime_data(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

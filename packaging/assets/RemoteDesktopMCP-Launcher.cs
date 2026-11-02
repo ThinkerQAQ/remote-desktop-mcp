@@ -38,21 +38,9 @@ internal static class RemoteDesktopLauncher
 
     private static void Configure()
     {
-        string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        string powershell = Path.Combine(windows, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-        string config = Path.Combine(Root, "Configure-RemoteDesktop.ps1");
-        if (!File.Exists(config)) {
-            MessageBox.Show("Configuration script not found. Repair RemoteDesktopMCP before configuring.",
-                "RemoteDesktopMCP", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-        // Only the script filename is passed on argv, not any credentials.
-        var info = new ProcessStartInfo(powershell, "-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + config + "\"");
-        info.WorkingDirectory = Root;
-        info.CreateNoWindow = true;
-        info.UseShellExecute = false;
-        info.WindowStyle = ProcessWindowStyle.Hidden;
-        Process.Start(info);
+        // The configuration form is owned by a native RemoteDesktopMCP WinExe,
+        // and its taskbar icon is the embedded app icon.
+        Launch(Path.Combine("bin", "RemoteDesktopMCP-Configure.exe"), "");
     }
 
     private static Form CreateManagementWindow()
