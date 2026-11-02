@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import urllib.request
@@ -82,6 +83,28 @@ def copy_app(source: Path, target: Path) -> None:
     for asset in ("Configure-RemoteDesktop.ps1", "Configure-RemoteDesktop.sh"):
         shutil.copy2(ROOT / "packaging/assets" / asset, target / asset)
     (target / "Configure-RemoteDesktop.sh").chmod(0o755)
+    brand = target / "brand"
+    brand.mkdir()
+    shutil.copy2(ROOT / "packaging/assets/vidotter.ico", brand / "vidotter.ico")
+    shutil.copy2(ROOT / "packaging/assets/vidotter.png", brand / "vidotter.png")
+
+
+def build_windows_launchers(target: Path) -> None:
+    """Build icon-branded GUI entrypoints using the Windows .NET Framework C# compiler."""
+    import os
+    win_dir = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    csc = win_dir / "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+    if not csc.is_file():
+        raise FileNotFoundError(f"Windows .NET Framework C# compiler required for GUI launcher: {csc}")
+    source = ROOT / "packaging/assets/RemoteDesktopMCP-Launcher.cs"
+    icon = target / "brand/vidotter.ico"
+    for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE")):
+        subprocess.run([
+            str(csc), "/nologo", "/target:winexe", f"/define:{switch}",
+            "/reference:System.Windows.Forms.dll", "/reference:System.Drawing.dll",
+            f"/win32icon:{icon}", f"/out:{target / (name + '.exe') if switch == 'MAINTENANCE' else target / 'bin' / (name + '.exe')}",
+            str(source)
+        ], check=True)
 
 
 def build(platform: str, arch: str, dest: Path, source: Path = ROOT) -> None:
@@ -102,6 +125,8 @@ def build(platform: str, arch: str, dest: Path, source: Path = ROOT) -> None:
         (stage / "bin").mkdir()
         (stage / "third_party").mkdir()
         copy_app(source, stage)
+        if platform == "windows":
+            build_windows_launchers(stage)
         node_archive = verified_download(node_base, node_filename, "SHASUMS256.txt")
         node_member = (lambda name: name.endswith("/node.exe")) if platform == "windows" else (lambda name: name.endswith("/bin/node"))
         node_path = stage / "bin" / ("node.exe" if platform == "windows" else "node")

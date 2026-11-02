@@ -20,6 +20,12 @@ class InstallerTests(unittest.TestCase):
         (stage / "node_modules/lib/data/fixture.json").write_text("{}")
         (stage / "bin" / ("node.exe" if platform == "windows" else "node")).write_text("node")
         (stage / "bin" / ("tunnel-client.exe" if platform == "windows" else "tunnel-client")).write_text("client")
+        if platform == "windows":
+            (stage / "bin/RemoteDesktopMCP-Configure.exe").write_text("stub")
+            (stage / "RemoteDesktopMCP-Maintenance.exe").write_text("stub")
+        (stage / "brand").mkdir()
+        (stage / "brand/vidotter.ico").write_text("stub")
+        (stage / "brand/vidotter.png").write_text("stub")
         (stage / ("Configure-RemoteDesktop.ps1" if platform == "windows" else "Configure-RemoteDesktop.sh")).write_text("configure")
         return stage
 
@@ -44,9 +50,9 @@ class InstallerTests(unittest.TestCase):
             dest = root / "out"
             prepare(stage, dest, "0.4.0", "windows")
             script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
-            self.assertIn("-STA", script)
-            self.assertIn("-WindowStyle Hidden", script)
-            self.assertNotIn("-NoExit", script)
+            self.assertIn("RemoteDesktopMCP-Configure.exe", script)
+            self.assertIn("RemoteDesktopMCP-Maintenance.exe", script)
+            self.assertNotIn("powershell.exe", script)
 
     def test_single_component_and_install_name(self):
         import xml.etree.ElementTree as ET
@@ -64,7 +70,23 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("QInstaller.ComponentSelection, false", controller)
             self.assertIn("QInstaller.StartMenuSelection, false", controller)
             package_script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
-            self.assertIn("RemoteDesktopMCP-Maintenance.exe", package_script)
+            self.assertIn("RemoteDesktopMCP-Uninstaller.exe", package_script)
+
+    def test_windows_maintenance_entrypoint_manages_both_actions(self):
+        import xml.etree.ElementTree as ET
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stage = self.fake_stage(root, "windows")
+            dest = root / "out"
+            prepare(stage, dest, "0.4.0", "windows")
+            xml = ET.parse(dest / "config/config.xml")
+            self.assertEqual(xml.findtext("./MaintenanceToolName"), "RemoteDesktopMCP-Uninstaller")
+            self.assertEqual(xml.findtext("./InstallerApplicationIcon"), "vidotter")
+            self.assertEqual(xml.findtext("./InstallerWindowIcon"), "vidotter.png")
+            script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
+            self.assertIn("RemoteDesktopMCP-Maintenance.exe", script)
+            self.assertIn("RemoteDesktopMCP-Uninstaller.exe", script)
+            self.assertIn("RemoteDesktopMCP-Configure.exe", script)
 
     def test_configuration_links_official_pages(self):
         with tempfile.TemporaryDirectory() as d:
@@ -76,6 +98,19 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("https://platform.openai.com/settings/organization/tunnels", page)
             self.assertIn("https://platform.openai.com/settings/organization/api-keys", page)
             self.assertIn("<bool>true</bool>", page)
+
+    def test_vidotter_icon_is_embedded_in_assets(self):
+        from struct import unpack_from
+        icon = Path(__file__).resolve().parents[1] / "assets" / "vidotter.ico"
+        png = icon.with_suffix(".png")
+        content = icon.read_bytes()
+        self.assertEqual(unpack_from("<HHH", content, 0), (0, 1, 4))
+        self.assertTrue(png.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")))
+        gui = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Launcher.cs").read_text()
+        self.assertIn("Modify Tunnel Configuration", gui)
+        self.assertIn("RemoteDesktopMCP-Uninstaller.exe", gui)
+        self.assertIn("DialogResult.Yes", gui)
+        self.assertNotIn("DV_RUNTIME_API_KEY", gui)
 
     def test_refuse_runtime_data(self):
         with tempfile.TemporaryDirectory() as d:

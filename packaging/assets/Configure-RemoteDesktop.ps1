@@ -22,6 +22,10 @@ foreach ($required in @($node, $tunnel, $setup)) {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'RemoteDesktopMCP - Configure Tunnel'
+$brandIconPath = Join-Path $root 'brand\vidotter.ico'
+if (Test-Path -LiteralPath $brandIconPath -PathType Leaf) {
+    $form.Icon = New-Object System.Drawing.Icon($brandIconPath)
+}
 $form.Size = New-Object System.Drawing.Size(620, 430)
 $form.MinimumSize = New-Object System.Drawing.Size(620, 430)
 $form.StartPosition = 'CenterScreen'

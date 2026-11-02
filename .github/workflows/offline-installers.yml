@@ -61,6 +61,15 @@ jobs:
           else
             dist/stage/bin/node dist/stage/scripts/smoke.mjs
           fi
+      - name: Verify Windows branded native management entrypoints
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($entry in @("dist/stage/bin/RemoteDesktopMCP-Configure.exe", "dist/stage/RemoteDesktopMCP-Maintenance.exe")) {
+            if (!(Test-Path $entry)) { throw "Missing native GUI entrypoint: $entry" }
+            $process = Start-Process -FilePath (Resolve-Path $entry).Path -ArgumentList "--self-test" -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Native GUI selftest failed ($($process.ExitCode)): $entry" }
+          }
       - name: Verify Windows first-run GUI works without terminal TTY
         if: runner.os == 'Windows'
         shell: pwsh

@@ -31,6 +31,8 @@ def check_payload(stage: Path, target: str) -> None:
     required = ("package.json", "LICENSE", "node_modules", "scripts/proxy.mjs",
                 "scripts/setup.mjs", "bin/node.exe" if target == "windows" else "bin/node",
                 "bin/tunnel-client.exe" if target == "windows" else "bin/tunnel-client",
+                "bin/RemoteDesktopMCP-Configure.exe" if target == "windows" else "brand/vidotter.png",
+                "RemoteDesktopMCP-Maintenance.exe" if target == "windows" else "brand/vidotter.ico",
                 "Configure-RemoteDesktop.ps1" if target == "windows" else "Configure-RemoteDesktop.sh")
     for name in required:
         if not (stage / name).exists():
@@ -64,7 +66,9 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
         "StartMenuDir": "RemoteDesktopMCP",
         "TargetDir": "@HomeDir@/RemoteDesktopMCP",
         "RemoveTargetDir": "false",
-        "MaintenanceToolName": "RemoteDesktopMCP-Maintenance",
+        "MaintenanceToolName": "RemoteDesktopMCP-Uninstaller",
+        "InstallerWindowIcon": "vidotter.png",
+        **({"InstallerApplicationIcon": "vidotter"} if target == "windows" else {}),
         "ControlScript": "controller.qs",
         "WizardStyle": "Modern",
         "WizardShowPageList": "false",
@@ -86,6 +90,8 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     tree.write(meta / "package.xml", encoding="utf-8", xml_declaration=True)
     shutil.copy2(ASSETS / "configure.ui", meta / "configure.ui")
     shutil.copy2(ASSETS / "controller.qs", config / "controller.qs")
+    shutil.copy2(ASSETS / "vidotter.ico", config / "vidotter.ico")
+    shutil.copy2(ASSETS / "vidotter.png", config / "vidotter.png")
     shutil.copy2(stage / "LICENSE", meta / "LICENSE.txt")
     script = """
 function Component() {
@@ -101,12 +107,13 @@ Component.prototype.createOperations = function() {
         script += """
     component.addOperation("Mkdir", "@UserStartMenuProgramsPath@/RemoteDesktopMCP");
     component.addOperation("CreateShortcut",
-        installer.environmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe",
-        "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Configure RemoteDesktopMCP.lnk",
-        '-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "@TargetDir@/Configure-RemoteDesktop.ps1"',
-        "workingDirectory=@TargetDir@");
+        "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe",
+        "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Configure Tunnel.lnk");
     component.addOperation("CreateShortcut",
         "@TargetDir@/RemoteDesktopMCP-Maintenance.exe",
+        "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Manage RemoteDesktopMCP.lnk");
+    component.addOperation("CreateShortcut",
+        "@TargetDir@/RemoteDesktopMCP-Uninstaller.exe",
         "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Uninstall.lnk");
 """
     elif target == "linux":
@@ -130,10 +137,8 @@ Component.prototype.finishConfigure = function() {
 """
     if target == "windows":
         script += """
-    installer.executeDetached(
-        installer.environmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe",
-        ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
-         "-File", installer.toNativeSeparators(target + "/Configure-RemoteDesktop.ps1")], target);
+    installer.executeDetached(installer.toNativeSeparators(
+        target + "/bin/RemoteDesktopMCP-Configure.exe"), [], target);
 """
     elif target == "darwin":
         script += """
