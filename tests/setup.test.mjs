@@ -54,6 +54,26 @@ test('Windows private directories/files have explicit current-user-only ACLs', {
   }
 });
 
+test('Windows config.toml remains private without changing installer directory ACL', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-install-root-' + process.pid + '-'));
+  const config = path.join(root, 'config.toml');
+  const check = script => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    env: { ...process.env, DV_TEST_ROOT: root, DV_TEST_CONFIG: config }, encoding: 'utf8', windowsHide: true
+  });
+  try {
+    const before = check('(Get-Acl -LiteralPath $env:DV_TEST_ROOT).Sddl');
+    assert.equal(before.status, 0);
+    privateWrite(config, '[tunnel]\\nid = "tunnel_synthetic"\\n', { secureParent: false });
+    const after = check('(Get-Acl -LiteralPath $env:DV_TEST_ROOT).Sddl');
+    assert.equal(after.status, 0);
+    assert.equal(after.stdout.trim(), before.stdout.trim(), 'Installer directory ACL must not be modified');
+    const verify = check("$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $acl=Get-Acl -LiteralPath $env:DV_TEST_CONFIG; $rules=@($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $id) {exit 1}");
+    assert.equal(verify.status, 0, 'config.toml must be restricted to the current user');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('private writes enforce permissions and refuse symlinks', { skip: process.platform === 'win32' }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-private-'));
   try {

@@ -63,7 +63,7 @@ async function setup() {
     const configFile = path.join(root, 'config.toml');
     if (fs.existsSync(configFile) && !saved.id) throw new Error('Existing config.toml was not created by this wizard. Move it aside or migrate it explicitly first.');
     if (active && manager !== 'background') await stop();
-    privateWrite(configFile, toml);
+    privateWrite(configFile, toml, { secureParent: false });
     privateWrite(credentials, JSON.stringify({ apiKey }));
     privateWrite(path.join(dir, 'tunnel.yaml'), JSON.stringify(tunnelConfig(config), null, 2));
     privateWrite(stateFile, JSON.stringify({ id, tunnel, tunnelArgs, port, manager }));
