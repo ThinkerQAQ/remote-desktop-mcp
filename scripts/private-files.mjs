@@ -11,7 +11,12 @@ export function restrict(file, directory = false) {
   // can require SeRestorePrivilege even for a file created by the current user.
   // Drop all inherited/explicit ACEs, allow only this user, and verify postconditions.
   const script = `$ErrorActionPreference='Stop'; $id=[System.Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=Get-Acl -LiteralPath $env:DV_PRIVATE_PATH -ErrorAction Stop; if($acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $id.Value){throw 'Private path must be owned by the current Windows user'}; $acl.SetAccessRuleProtection($true,$false); foreach($existing in @($acl.Access)){[void]$acl.RemoveAccessRuleSpecific($existing)}; $rule=New-Object System.Security.AccessControl.FileSystemAccessRule($id,'FullControl',${directory ? "'ContainerInherit,ObjectInherit','None'," : ''}'Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:DV_PRIVATE_PATH -AclObject $acl -ErrorAction Stop; $actual=Get-Acl -LiteralPath $env:DV_PRIVATE_PATH -ErrorAction Stop; $rules=@($actual.GetAccessRules($true,$false,[System.Security.Principal.SecurityIdentifier])); if(!$actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $id.Value -or $rules[0].AccessControlType -ne 'Allow' -or ($rules[0].FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -ne [System.Security.AccessControl.FileSystemRights]::FullControl){throw 'Private Windows ACL postcondition failed'}`;
-  const p = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_PRIVATE_PATH: file }, encoding: 'utf8', windowsHide: true, timeout: 20000 });
+  // GitHub Actions and shells launched by PowerShell 7 may inject a
+  // PowerShell 7 PSModulePath into Windows PowerShell 5.1. Remove it so that
+  // the built-in Microsoft.PowerShell.Security module can load normally.
+  const env = { ...process.env, DV_PRIVATE_PATH: file };
+  for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];
+  const p = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env, encoding: 'utf8', windowsHide: true, timeout: 20000 });
   if (p.status !== 0) {
     // Report enough diagnostic context to identify policy/syntax failures, but
     // never expose the private file path (or its contents) in public CI logs.

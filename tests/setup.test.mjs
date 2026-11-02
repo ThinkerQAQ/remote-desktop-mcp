@@ -47,7 +47,9 @@ test('Windows private directories/files have explicit current-user-only ACLs', {
     privateDir(dir);
     privateWrite(file, '{"synthetic":true}');
     const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $id) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
-    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file }, encoding: 'utf8', windowsHide: true });
+    const env = { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file };
+    for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];
+    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env, encoding: 'utf8', windowsHide: true });
     assert.equal(check.status, 0, 'Windows ACL verification failed');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -58,7 +60,7 @@ test('Windows config.toml remains private without changing installer directory A
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-install-root-' + process.pid + '-'));
   const config = path.join(root, 'config.toml');
   const check = script => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-    env: { ...process.env, DV_TEST_ROOT: root, DV_TEST_CONFIG: config }, encoding: 'utf8', windowsHide: true
+    env: Object.fromEntries(Object.entries({ ...process.env, DV_TEST_ROOT: root, DV_TEST_CONFIG: config }).filter(([key]) => key.toLowerCase() !== 'psmodulepath')), encoding: 'utf8', windowsHide: true
   });
   try {
     const before = check('(Get-Acl -LiteralPath $env:DV_TEST_ROOT).Sddl');
