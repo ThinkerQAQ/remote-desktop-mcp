@@ -31,8 +31,8 @@ def check_payload(stage: Path, target: str) -> None:
     required = ("package.json", "LICENSE", "node_modules", "scripts/proxy.mjs",
                 "scripts/setup.mjs", "bin/node.exe" if target == "windows" else "bin/node",
                 "bin/tunnel-client.exe" if target == "windows" else "bin/tunnel-client",
-                "bin/RemoteDesktopMCP-Configure.exe" if target == "windows" else "brand/vidotter.png",
-                "RemoteDesktopMCP-Maintenance.exe" if target == "windows" else "brand/vidotter.ico",
+                "bin/RemoteDesktopMCP-Configure.exe" if target == "windows" else "brand/remotedesktopmcp.png",
+                "RemoteDesktopMCP-Maintenance.exe" if target == "windows" else "brand/remotedesktopmcp.ico",
                 "Configure-RemoteDesktop.ps1" if target == "windows" else "Configure-RemoteDesktop.sh")
     for name in required:
         if not (stage / name).exists():
@@ -67,8 +67,6 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
         "TargetDir": "@HomeDir@/RemoteDesktopMCP",
         "RemoveTargetDir": "false",
         "MaintenanceToolName": "RemoteDesktopMCP-Uninstaller",
-        "InstallerWindowIcon": "vidotter.png",
-        **({"InstallerApplicationIcon": "vidotter"} if target == "windows" else {}),
         "ControlScript": "controller.qs",
         "WizardStyle": "Modern",
         "WizardShowPageList": "false",
@@ -90,8 +88,6 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     tree.write(meta / "package.xml", encoding="utf-8", xml_declaration=True)
     shutil.copy2(ASSETS / "configure.ui", meta / "configure.ui")
     shutil.copy2(ASSETS / "controller.qs", config / "controller.qs")
-    shutil.copy2(ASSETS / "vidotter.ico", config / "vidotter.ico")
-    shutil.copy2(ASSETS / "vidotter.png", config / "vidotter.png")
     shutil.copy2(stage / "LICENSE", meta / "LICENSE.txt")
     script = """
 function Component() {

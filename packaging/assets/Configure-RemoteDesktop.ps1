@@ -22,7 +22,7 @@ foreach ($required in @($node, $tunnel, $setup)) {
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'RemoteDesktopMCP - Configure Tunnel'
-$brandIconPath = Join-Path $root 'brand\vidotter.ico'
+$brandIconPath = Join-Path $root 'brand\remotedesktopmcp.ico'
 if (Test-Path -LiteralPath $brandIconPath -PathType Leaf) {
     $form.Icon = New-Object System.Drawing.Icon($brandIconPath)
 }

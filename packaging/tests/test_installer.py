@@ -24,8 +24,8 @@ class InstallerTests(unittest.TestCase):
             (stage / "bin/RemoteDesktopMCP-Configure.exe").write_text("stub")
             (stage / "RemoteDesktopMCP-Maintenance.exe").write_text("stub")
         (stage / "brand").mkdir()
-        (stage / "brand/vidotter.ico").write_text("stub")
-        (stage / "brand/vidotter.png").write_text("stub")
+        (stage / "brand/remotedesktopmcp.ico").write_text("stub")
+        (stage / "brand/remotedesktopmcp.png").write_text("stub")
         (stage / ("Configure-RemoteDesktop.ps1" if platform == "windows" else "Configure-RemoteDesktop.sh")).write_text("configure")
         return stage
 
@@ -81,8 +81,8 @@ class InstallerTests(unittest.TestCase):
             prepare(stage, dest, "0.4.0", "windows")
             xml = ET.parse(dest / "config/config.xml")
             self.assertEqual(xml.findtext("./MaintenanceToolName"), "RemoteDesktopMCP-Uninstaller")
-            self.assertEqual(xml.findtext("./InstallerApplicationIcon"), "vidotter")
-            self.assertEqual(xml.findtext("./InstallerWindowIcon"), "vidotter.png")
+            self.assertIsNone(xml.findtext("./InstallerApplicationIcon"))
+            self.assertIsNone(xml.findtext("./InstallerWindowIcon"))
             script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
             self.assertIn("RemoteDesktopMCP-Maintenance.exe", script)
             self.assertIn("RemoteDesktopMCP-Uninstaller.exe", script)
@@ -99,12 +99,16 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("https://platform.openai.com/settings/organization/api-keys", page)
             self.assertIn("<bool>true</bool>", page)
 
-    def test_vidotter_icon_is_embedded_in_assets(self):
+    def test_remotedesktopmcp_icon_is_embedded_in_assets(self):
         from struct import unpack_from
-        icon = Path(__file__).resolve().parents[1] / "assets" / "vidotter.ico"
+        icon = Path(__file__).resolve().parents[1] / "assets" / "remotedesktopmcp.ico"
         png = icon.with_suffix(".png")
         content = icon.read_bytes()
-        self.assertEqual(unpack_from("<HHH", content, 0), (0, 1, 4))
+        self.assertEqual(unpack_from("<HHH", content, 0), (0, 1, 5))
+        self.assertEqual(
+            [unpack_from("<B", content, 6 + n * 16)[0] for n in range(5)],
+            [16, 24, 32, 48, 64],
+        )
         self.assertTrue(png.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")))
         gui = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Launcher.cs").read_text()
         self.assertIn("Modify Tunnel Configuration", gui)

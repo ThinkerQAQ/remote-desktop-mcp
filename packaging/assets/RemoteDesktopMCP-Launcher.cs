@@ -1,5 +1,5 @@
 // Windows user-level UI entry points. Compiled with /target:winexe and the
-// bundled VidOtter icon. No tunnel IDs, API keys, or credentials on argv.
+// bundled RemoteDesktopMCP icon. No tunnel IDs, API keys, or credentials on argv.
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -64,7 +64,7 @@ internal static class RemoteDesktopLauncher
         form.MinimumSize = form.Size;
         form.MaximumSize = form.Size;
         form.MaximizeBox = false;
-        string icon = Path.Combine(Root, "brand", "vidotter.ico");
+        string icon = Path.Combine(Root, "brand", "remotedesktopmcp.ico");
         if (File.Exists(icon)) form.Icon = new Icon(icon);
 
         var title = new Label();
@@ -134,7 +134,7 @@ internal static class RemoteDesktopLauncher
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             if (args.Length == 1 && args[0] == "--self-test") {
-                if (!File.Exists(Path.Combine(Root, "brand", "vidotter.ico"))) return 5;
+                if (!File.Exists(Path.Combine(Root, "brand", "remotedesktopmcp.ico"))) return 5;
 #if MAINTENANCE
                 using (var form = CreateManagementWindow()) {
                     bool hasModify = false, hasUninstall = false;

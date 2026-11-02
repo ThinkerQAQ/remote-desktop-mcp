@@ -85,8 +85,8 @@ def copy_app(source: Path, target: Path) -> None:
     (target / "Configure-RemoteDesktop.sh").chmod(0o755)
     brand = target / "brand"
     brand.mkdir()
-    shutil.copy2(ROOT / "packaging/assets/vidotter.ico", brand / "vidotter.ico")
-    shutil.copy2(ROOT / "packaging/assets/vidotter.png", brand / "vidotter.png")
+    shutil.copy2(ROOT / "packaging/assets/remotedesktopmcp.ico", brand / "remotedesktopmcp.ico")
+    shutil.copy2(ROOT / "packaging/assets/remotedesktopmcp.png", brand / "remotedesktopmcp.png")
 
 
 def build_windows_launchers(target: Path) -> None:
@@ -97,7 +97,7 @@ def build_windows_launchers(target: Path) -> None:
     if not csc.is_file():
         raise FileNotFoundError(f"Windows .NET Framework C# compiler required for GUI launcher: {csc}")
     source = ROOT / "packaging/assets/RemoteDesktopMCP-Launcher.cs"
-    icon = target / "brand/vidotter.ico"
+    icon = target / "brand/remotedesktopmcp.ico"
     for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE")):
         subprocess.run([
             str(csc), "/nologo", "/target:winexe", f"/define:{switch}",
