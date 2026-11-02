@@ -25,5 +25,13 @@ test('native manager definitions escape paths and never embed credentials', () =
   assert.equal(xml('a&<"'), 'a&amp;&lt;&quot;'); assert.equal(psQuote("a'b"), "'a''b'");
   assert.ok(launchPlist().includes('<key>ProgramArguments</key>'));
   assert.ok(taskScript('start').includes('-RunLevel Limited'));
+  // Logon auto-start is a user-level scheduled task, never a Windows service.
+  assert.match(taskScript('auto-status'), /Get-ScheduledTask/);
+  assert.match(taskScript('auto-enable'), /Enable-ScheduledTask/);
+  assert.match(taskScript('auto-disable'), /Disable-ScheduledTask/);
+  assert.match(taskScript('register'), /-AtLogOn/);
+  assert.doesNotMatch(taskScript('auto-disable'), /Stop-ScheduledTask/);
+  assert.doesNotMatch(taskScript('auto-disable'), /Start-ScheduledTask/);
+
   for (const text of [launchPlist(), taskScript('start')]) assert.ok(!text.includes('OPENAI_API_KEY'));
 });

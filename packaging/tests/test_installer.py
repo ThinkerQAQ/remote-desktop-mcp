@@ -37,9 +37,15 @@ class InstallerTests(unittest.TestCase):
                 dest = root / "out"
                 prepare(stage, dest, "0.4.0", platform)
                 self.assertTrue((dest / "config/config.xml").is_file())
-                self.assertTrue((dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").is_file())
+                config_page = dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui"
+                self.assertEqual(config_page.is_file(), platform != "windows")
                 script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
-                self.assertIn("finishConfigure", script)
+                if platform != "windows":
+                    self.assertIn("finishConfigure", script)
+                else:
+                    self.assertNotIn("finishConfigure", script)
+                    self.assertIn("function Component() {}", script)
+                    self.assertIn("RemoteDesktopMCP-Configure.exe", script)
                 self.assertNotIn("Runtime API key", script)
                 self.assertTrue((dest / "packages/org.thinkerqaq.remotedesktop/data/node_modules/lib/data/fixture.json").exists())
 
@@ -88,16 +94,26 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("RemoteDesktopMCP-Uninstaller.exe", script)
             self.assertIn("RemoteDesktopMCP-Configure.exe", script)
 
-    def test_configuration_links_official_pages(self):
+    def test_configuration_links_only_in_app_not_installer_completion(self):
+        import xml.etree.ElementTree as ET
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            stage = self.fake_stage(root, "windows")
-            dest = root / "out"
-            prepare(stage, dest, "0.4.0", "windows")
-            page = (dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").read_text()
-            self.assertIn("https://platform.openai.com/settings/organization/tunnels", page)
-            self.assertIn("https://platform.openai.com/settings/organization/api-keys", page)
-            self.assertIn("<bool>true</bool>", page)
+            for platform in ("windows", "linux", "darwin"):
+                stage = self.fake_stage(root / platform, platform)
+                dest = root / (platform + "-out")
+                prepare(stage, dest, "0.4.0", platform)
+                config = ET.parse(dest / "config/config.xml")
+                if platform == "windows":
+                    self.assertEqual(config.findtext("./RunProgram"), "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe")
+                    self.assertEqual(config.findtext("./RunProgramDescription"), "Open RemoteDesktopMCP configuration")
+                else:
+                    text = (dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").read_text()
+                    self.assertIn("Installation complete.", text)
+                    self.assertNotIn("platform.openai.com", text)
+        ui = (Path(__file__).resolve().parents[1] / "assets/RemoteDesktopMCP-Configure.cs").read_text()
+        self.assertIn("https://platform.openai.com/settings/organization/tunnels", ui)
+        self.assertIn("https://platform.openai.com/settings/organization/api-keys", ui)
+        self.assertIn("https://chatgpt.com/plugins", ui)
 
     def test_remotedesktopmcp_icon_is_embedded_in_assets(self):
         from struct import unpack_from
@@ -119,12 +135,17 @@ class InstallerTests(unittest.TestCase):
     def test_native_windows_config_has_connection_status_and_masked_key(self):
         gui = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Configure.cs").read_text()
         self.assertIn('SetCurrentProcessExplicitAppUserModelID', gui)
-        self.assertIn('Open ChatGPT', gui)
-        self.assertIn('https://chatgpt.com/', gui)
+        self.assertIn('Open ChatGPT Plugins', gui)
+        self.assertIn('https://chatgpt.com/plugins', gui)
         self.assertIn('https://help.openai.com/en/articles/12584461-', gui)
         self.assertIn('UseSystemPasswordChar=true', gui)
         self.assertIn('const string Mask = "********"', gui)
         self.assertIn('Local Tunnel: Connected', gui)
+        self.assertIn('Start Service', gui)
+        self.assertIn('Stop Service', gui)
+        self.assertIn('Auto-start at Windows sign-in', gui)
+        self.assertIn('autostart ', gui)
+        self.assertIn('Refresh status', gui)
         self.assertIn('ChatGPT plugin: not verified', gui)
         self.assertIn('" status"', gui)
         self.assertIn('DV_RUNTIME_API_KEY', gui)

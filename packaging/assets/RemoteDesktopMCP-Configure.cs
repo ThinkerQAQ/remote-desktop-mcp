@@ -13,7 +13,7 @@ using System.Windows.Forms;
 internal sealed class RemoteDesktopConfigure : Form {
   const string TunnelUrl = "https://platform.openai.com/settings/organization/tunnels";
   const string ApiUrl = "https://platform.openai.com/settings/organization/api-keys";
-  const string ChatUrl = "https://chatgpt.com/";
+  const string ChatUrl = "https://chatgpt.com/plugins";
   const string HelpUrl = "https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt";
   const string Mask = "********";
   [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
@@ -24,14 +24,15 @@ internal sealed class RemoteDesktopConfigure : Form {
   static string Runtime { get { return Path.Combine(Root,"scripts","runtime.mjs"); } }
   static string Tunnel { get { return Path.Combine(Root,"bin","tunnel-client.exe"); } }
   readonly TextBox id=new TextBox(), key=new TextBox();
-  readonly Button go=new Button(), refresh=new Button(), chat=new Button();
+  readonly Button go=new Button(), refresh=new Button(), chat=new Button(), service=new Button();
+  readonly CheckBox autostart=new CheckBox();
   readonly Label status=new Label(), plugin=new Label(), hint=new Label();
   readonly System.Windows.Forms.Timer poll=new System.Windows.Forms.Timer();
-  bool saved, placeholder, busy, checking;
+  bool saved, placeholder, busy, checking, syncingAutostart, serviceRunning;
   internal RemoteDesktopConfigure() {
     Text="RemoteDesktopMCP - Configure Tunnel";
     StartPosition=FormStartPosition.CenterScreen;
-    ClientSize=new Size(688,462);
+    ClientSize=new Size(688,525);
     FormBorderStyle=FormBorderStyle.FixedDialog;
     MaximizeBox=false;
     Font=new Font("Segoe UI",9F);
@@ -49,17 +50,24 @@ internal sealed class RemoteDesktopConfigure : Form {
     key.Leave += (s,e)=>{if(saved && key.Text.Length==0) SetMask();};
     Controls.Add(key);
     L("An existing key is shown as ********. Leave it unchanged to reuse it.",22,208,633,30,false).ForeColor=Color.DimGray;
-    go.Text="Configure and Start";go.Location=new Point(445,252);go.Size=new Size(215,35);
-    go.Click += Configure;Controls.Add(go);
-    refresh.Text="Refresh status";refresh.Location=new Point(298,252);refresh.Size=new Size(136,35);
+    service.Text="Start Service";service.Location=new Point(22,252);service.Size=new Size(174,35);
+    service.Enabled=false;service.Click += ServiceClicked;Controls.Add(service);
+    refresh.Text="Refresh status";refresh.Location=new Point(207,252);refresh.Size=new Size(138,35);
     refresh.Click += (s,e)=>UpdateStatus();Controls.Add(refresh);
-    status.Text="Local Tunnel: checking...";status.Location=new Point(22,309);status.Size=new Size(630,24);Controls.Add(status);
-    plugin.Text="ChatGPT plugin: not verified";plugin.Location=new Point(22,338);plugin.Size=new Size(630,24);Controls.Add(plugin);
-    chat.Text="Open ChatGPT";chat.Location=new Point(22,373);chat.Size=new Size(160,34);
+    go.Text="Configure and Start";go.Location=new Point(355,252);go.Size=new Size(305,35);
+    go.Click += Configure;Controls.Add(go);
+    autostart.Text="Auto-start at Windows sign-in";
+    autostart.Location=new Point(22,299);autostart.Size=new Size(390,28);
+    autostart.Enabled=false;
+    autostart.CheckedChanged += AutostartChanged;
+    Controls.Add(autostart);
+    status.Text="Local Tunnel: checking...";status.Location=new Point(22,342);status.Size=new Size(630,24);Controls.Add(status);
+    plugin.Text="ChatGPT plugin: not verified";plugin.Location=new Point(22,371);plugin.Size=new Size(630,24);Controls.Add(plugin);
+    chat.Text="Open ChatGPT Plugins";chat.Location=new Point(22,413);chat.Size=new Size(186,34);
     chat.Click += (s,e)=>Open(ChatUrl);Controls.Add(chat);
-    Link("How to register your Tunnel as a plugin",HelpUrl,203,380,450);
-    hint.Location=new Point(22,414);hint.Size=new Size(637,40);
-    hint.Text="In ChatGPT: Plugins > + > Add custom MCP server > Tunnel, then test its tools.";
+    Link("How to register your Tunnel as a plugin",HelpUrl,226,421,427);
+    hint.Location=new Point(22,460);hint.Size=new Size(637,40);
+    hint.Text="Register your Tunnel in ChatGPT Plugins, then verify its MCP tools.";
     hint.ForeColor=Color.DimGray;Controls.Add(hint);
     Load += (s,e)=>{
       RestoreFields();UpdateStatus();
@@ -99,7 +107,7 @@ internal sealed class RemoteDesktopConfigure : Form {
     if(String.IsNullOrWhiteSpace(id.Text))id.Text=SavedId();
     if(saved && !key.Focused && (placeholder || key.Text.Length==0))SetMask();
   }
-  sealed class State{internal bool Running,Ready;}
+  sealed class State{internal bool Running,Ready,SupportsAutoStart;internal bool? Autostart;}
   static State ReadState(){
     if(!Configured)return new State();
     var psi=new ProcessStartInfo(Node,"\""+Runtime+"\" status");
@@ -114,7 +122,10 @@ internal sealed class RemoteDesktopConfigure : Form {
       string json=output.Result;
       return new State{
         Running=Regex.IsMatch(json,"\"managed_process_running\"\\s*:\\s*true"),
-        Ready=Regex.IsMatch(json,"\"tunnel_ready\"\\s*:\\s*true")
+        Ready=Regex.IsMatch(json,"\"tunnel_ready\"\\s*:\\s*true"),
+        SupportsAutoStart=Regex.IsMatch(json,"\"manager\"\\s*:\\s*\"scheduled-task\""),
+        Autostart=Regex.IsMatch(json,"\"autostart_enabled\"\\s*:\\s*true")?true:
+          Regex.IsMatch(json,"\"autostart_enabled\"\\s*:\\s*false")?(bool?)false:null
       };
     }
   }
@@ -132,9 +143,64 @@ internal sealed class RemoteDesktopConfigure : Form {
         state!=null && state.Running?"Local Tunnel: starting / not ready":
         Configured?"Local Tunnel: configured, not connected":"Local Tunnel: not configured";
       status.ForeColor=state!=null && state.Ready?Color.DarkGreen:Color.DarkGoldenrod;
+      serviceRunning=state!=null && state.Running;
+      service.Text=serviceRunning?"Stop Service":"Start Service";
+      service.Enabled=Configured && File.Exists(Node) && File.Exists(Runtime) && !busy;
+      syncingAutostart=true;
+      try {
+        autostart.Checked=state!=null && state.Autostart==true;
+        autostart.Enabled=Configured && File.Exists(Node) && File.Exists(Runtime) && state!=null && state.SupportsAutoStart && !busy;
+      } finally {syncingAutostart=false;}
       plugin.Text="ChatGPT plugin: not verified here (complete registration in ChatGPT)";
     };
     work.RunWorkerAsync();
+  }
+  void BeginControl(string arguments, Action<bool> finished) {
+    if(busy || !Configured || !File.Exists(Node) || !File.Exists(Runtime))return;
+    busy=true;go.Enabled=false;refresh.Enabled=false;service.Enabled=false;autostart.Enabled=false;
+    var work=new BackgroundWorker();
+    work.DoWork+=(s,e)=>{
+      var psi=new ProcessStartInfo(Node,"\""+Runtime+"\" "+arguments);
+      psi.WorkingDirectory=Root;psi.UseShellExecute=false;psi.CreateNoWindow=true;
+      psi.RedirectStandardOutput=true;psi.RedirectStandardError=true;
+      using(var p=Process.Start(psi)){
+        if(p==null)throw new InvalidOperationException("Could not start service control");
+        var output=p.StandardOutput.ReadToEndAsync();
+        var errors=p.StandardError.ReadToEndAsync();
+        if(!p.WaitForExit(60000)){p.Kill();throw new TimeoutException("Service control timed out");}
+        e.Result=p.ExitCode==0;
+      }
+    };
+    work.RunWorkerCompleted+=(s,e)=>{
+      busy=false;go.Enabled=true;refresh.Enabled=true;work.Dispose();
+      if(IsDisposed)return;
+      finished(e.Error==null && e.Result is bool && (bool)e.Result);
+      UpdateStatus();
+    };
+    work.RunWorkerAsync();
+  }
+  void ServiceClicked(object sender,EventArgs e) {
+    var verb=serviceRunning?"stop":"start";
+    status.Text="Local Tunnel: "+(serviceRunning?"stopping...":"starting...");
+    BeginControl(verb,ok=>{
+      if(!ok) {
+        status.Text="Local Tunnel: service control failed";
+        status.ForeColor=Color.DarkRed;
+      }
+    });
+  }
+  void AutostartChanged(object sender,EventArgs e) {
+    if(syncingAutostart || busy || !Configured)return;
+    bool enabled=autostart.Checked;
+    hint.Text="Updating Windows sign-in auto-start...";
+    BeginControl("autostart "+(enabled?"enable":"disable"),ok=>{
+      if(!ok) {
+        syncingAutostart=true;autostart.Checked=!enabled;syncingAutostart=false;
+        hint.Text="Could not change Windows auto-start. Check your user task permissions.";
+      } else {
+        hint.Text=enabled?"Auto-start enabled for Windows sign-in.":"Auto-start disabled. The current Tunnel is not stopped.";
+      }
+    });
   }
   void Configure(object sender,EventArgs e){
     string tunnelId=id.Text.Trim();
@@ -160,7 +226,7 @@ internal sealed class RemoteDesktopConfigure : Form {
     psi.EnvironmentVariables["PATH"]=Path.Combine(Root,"bin")+";"+Environment.GetEnvironmentVariable("PATH");
     if(!reuse)psi.EnvironmentVariables["DV_RUNTIME_API_KEY"]=typed;
     // No secret in argv, logs or status text. Environment is cleared after spawn.
-    busy=true;go.Enabled=false;refresh.Enabled=false;
+    busy=true;go.Enabled=false;refresh.Enabled=false;service.Enabled=false;autostart.Enabled=false;
     status.Text="Local Tunnel: validating MCP and connecting...";
     status.ForeColor=Color.DarkGoldenrod;
     var work=new BackgroundWorker();
@@ -202,8 +268,9 @@ internal sealed class RemoteDesktopConfigure : Form {
       ? placeholder && key.Text == Mask && id.Text == SavedId()
       : key.Text.Length == 0;
     return Icon!=null && key.UseSystemPasswordChar && maskSafe
+      && service.Text=="Start Service" && autostart.Text=="Auto-start at Windows sign-in"
       && Process.GetCurrentProcess().ProcessName == "RemoteDesktopMCP-Configure"
-      && chat.Text=="Open ChatGPT" && status.Text.Contains("Tunnel")
+      && chat.Text=="Open ChatGPT Plugins" && status.Text.Contains("Tunnel")
       && plugin.Text.Contains("ChatGPT") && go.Text=="Configure and Start";
   }
   [STAThread]

@@ -58,7 +58,7 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     config.mkdir(parents=True)
     meta.mkdir(parents=True)
     shutil.copytree(stage, data)
-    write_xml(config / "config.xml", "Installer", {
+    installer_config = {
         "Name": "RemoteDesktopMCP",
         "Version": version,
         "Title": "RemoteDesktopMCP",
@@ -70,7 +70,11 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
         "ControlScript": "controller.qs",
         "WizardStyle": "Modern",
         "WizardShowPageList": "false",
-    })
+    }
+    if target == "windows":
+        installer_config["RunProgram"] = "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe"
+        installer_config["RunProgramDescription"] = "Open RemoteDesktopMCP configuration"
+    write_xml(config / "config.xml", "Installer", installer_config)
     write_xml(meta / "package.xml", "Package", {
         "DisplayName": "RemoteDesktopMCP",
         "Description": "Desktop Commander MCP with bundled Node.js and OpenAI tunnel-client",
@@ -81,12 +85,14 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     })
     tree = ET.parse(meta / "package.xml")
     user_interfaces = ET.SubElement(tree.getroot(), "UserInterfaces")
-    ET.SubElement(user_interfaces, "UserInterface").text = "configure.ui"
+    if target != "windows":
+        ET.SubElement(user_interfaces, "UserInterface").text = "configure.ui"
     licenses = ET.SubElement(tree.getroot(), "Licenses")
     ET.SubElement(licenses, "License", {"name": "RemoteDesktopMCP (Apache-2.0)", "file": "LICENSE.txt"})
     ET.indent(tree)
     tree.write(meta / "package.xml", encoding="utf-8", xml_declaration=True)
-    shutil.copy2(ASSETS / "configure.ui", meta / "configure.ui")
+    if target != "windows":
+        shutil.copy2(ASSETS / "configure.ui", meta / "configure.ui")
     shutil.copy2(ASSETS / "controller.qs", config / "controller.qs")
     shutil.copy2(stage / "LICENSE", meta / "LICENSE.txt")
     script = """
@@ -96,6 +102,12 @@ function Component() {
         installer.finishButtonClicked.connect(this, Component.prototype.finishConfigure);
     }
 }
+Component.prototype.createOperations = function() {
+    component.createOperations();
+"""
+    if target == "windows":
+        script = """
+function Component() {}
 Component.prototype.createOperations = function() {
     component.createOperations();
 """
@@ -118,7 +130,10 @@ Component.prototype.createOperations = function() {
         script += f'    component.addOperation("CreateDesktopEntry", "remotedesktopmcp.desktop", {json.dumps(desktop)});\n'
     else:
         script += "    // macOS: configuration launcher is provided as a .command file.\n"
-    script += """};
+    if target == "windows":
+        script += "};\n"
+    else:
+        script += """};
 Component.prototype.showConfigure = function() {
     if (installer.isInstaller() && !installer.isCommandLineInstance() &&
         installer.status == QInstaller.Success)
@@ -131,12 +146,7 @@ Component.prototype.finishConfigure = function() {
     if (!form || !form.configureNowCheckBox.checked) return;
     var target = installer.value("TargetDir");
 """
-    if target == "windows":
-        script += """
-    installer.executeDetached(installer.toNativeSeparators(
-        target + "/bin/RemoteDesktopMCP-Configure.exe"), [], target);
-"""
-    elif target == "darwin":
+    if target == "darwin":
         script += """
     installer.executeDetached("/usr/bin/open",
         ["-a", "Terminal", target + "/Configure-RemoteDesktop.command"], target);
@@ -145,13 +155,14 @@ Component.prototype.finishConfigure = function() {
         launch = data / "Configure-RemoteDesktop.command"
         launch.write_text('#!/bin/bash\nroot="$(cd "$(dirname "$0")" && pwd)"\nexec /bin/bash "$root/Configure-RemoteDesktop.sh"\n')
         launch.chmod(0o755)
-    else:
+    elif target == "linux":
         script += """
     installer.executeDetached("/bin/bash",
         ["-c", 'command -v x-terminal-emulator >/dev/null && exec x-terminal-emulator -e /bin/bash "' +
           target + '/Configure-RemoteDesktop.sh"'], target);
 """
-    script += "};\n"
+    if target != "windows":
+        script += "};\n"
     (meta / "installscript.qs").write_text(script)
 
 
