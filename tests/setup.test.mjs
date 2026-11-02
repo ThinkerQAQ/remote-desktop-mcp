@@ -106,7 +106,11 @@ function run(command, args, env) {
     child.on('error', reject); child.on('close', code => { clearTimeout(timer); resolve({ code, output }); });
   });
 }
-for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && process.platform === 'linux' }, async () => {
+// GitHub-hosted Windows CI has no interactive user logon desktop.
+// Test background service, security and script generation in CI; keep the
+// native scheduled-task end-to-end acceptance on a logged-in Windows device.
+for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && (process.platform === 'linux' ||
+  (process.platform === 'win32' && process.env.GITHUB_ACTIONS === 'true')) }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-wizard-'));
   let started = false;
   const env = { ...process.env, DV_TUNNEL_ID: 'tunnel_EXAMPLE', DV_RUNTIME_API_KEY: 'synthetic-secret-do-not-print' };
