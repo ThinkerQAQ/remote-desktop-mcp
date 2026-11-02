@@ -50,12 +50,12 @@ internal sealed class RemoteDesktopConfigure : Form {
     key.Leave += (s,e)=>{if(saved && key.Text.Length==0) SetMask();};
     Controls.Add(key);
     L("An existing key is shown as ********. Leave it unchanged to reuse it.",22,208,633,30,false).ForeColor=Color.DimGray;
-    service.Text="Start Service";service.Location=new Point(22,252);service.Size=new Size(174,35);
+    go.Text="Save";go.Location=new Point(22,252);go.Size=new Size(190,35);
+    go.Click += SaveClicked;Controls.Add(go);
+    service.Text="Start Service";service.Location=new Point(224,252);service.Size=new Size(190,35);
     service.Enabled=false;service.Click += ServiceClicked;Controls.Add(service);
-    refresh.Text="Refresh status";refresh.Location=new Point(207,252);refresh.Size=new Size(138,35);
+    refresh.Text="Refresh Status";refresh.Location=new Point(426,252);refresh.Size=new Size(234,35);
     refresh.Click += (s,e)=>UpdateStatus();Controls.Add(refresh);
-    go.Text="Configure and Start";go.Location=new Point(355,252);go.Size=new Size(305,35);
-    go.Click += Configure;Controls.Add(go);
     autostart.Text="Auto-start at Windows sign-in";
     autostart.Location=new Point(22,299);autostart.Size=new Size(390,28);
     autostart.Enabled=false;
@@ -186,6 +186,9 @@ internal sealed class RemoteDesktopConfigure : Form {
       if(!ok) {
         status.Text="Local Tunnel: service control failed";
         status.ForeColor=Color.DarkRed;
+      } else {
+        hint.Text=verb=="stop"?"Service stopped. Saved configuration is unchanged.":
+          "Service started. Refresh Status to verify the local connection.";
       }
     });
   }
@@ -202,7 +205,7 @@ internal sealed class RemoteDesktopConfigure : Form {
       }
     });
   }
-  void Configure(object sender,EventArgs e){
+  void SaveClicked(object sender,EventArgs e){
     string tunnelId=id.Text.Trim();
     if(!Regex.IsMatch(tunnelId,"^tunnel_[A-Za-z0-9_-]+$")){
       MessageBox.Show("Enter a valid Tunnel ID.","RemoteDesktopMCP",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;
@@ -217,7 +220,7 @@ internal sealed class RemoteDesktopConfigure : Form {
       MessageBox.Show("Bundled runtime is missing. Repair installation first.","RemoteDesktopMCP",
         MessageBoxButtons.OK,MessageBoxIcon.Error);return;
     }
-    var psi=new ProcessStartInfo(Node,"\""+Script+"\" --non-interactive");
+    var psi=new ProcessStartInfo(Node,"\""+Script+"\" --non-interactive --configure-only");
     psi.WorkingDirectory=Root;psi.UseShellExecute=false;psi.CreateNoWindow=true;
     psi.RedirectStandardOutput=true;psi.RedirectStandardError=true;
     psi.EnvironmentVariables["DV_TUNNEL_ID"]=tunnelId;
@@ -227,7 +230,7 @@ internal sealed class RemoteDesktopConfigure : Form {
     if(!reuse)psi.EnvironmentVariables["DV_RUNTIME_API_KEY"]=typed;
     // No secret in argv, logs or status text. Environment is cleared after spawn.
     busy=true;go.Enabled=false;refresh.Enabled=false;service.Enabled=false;autostart.Enabled=false;
-    status.Text="Local Tunnel: validating MCP and connecting...";
+    status.Text="Local Tunnel: validating and saving configuration...";
     status.ForeColor=Color.DarkGoldenrod;
     var work=new BackgroundWorker();
     work.DoWork+=(s,args)=>{
@@ -243,7 +246,7 @@ internal sealed class RemoteDesktopConfigure : Form {
         if(!p.WaitForExit(150000)){p.Kill();throw new TimeoutException();}
         p.WaitForExit(); // Flush asynchronous event handlers.
         if(p.ExitCode!=0){args.Result=false;return;}
-        lock(output){args.Result=Regex.IsMatch(output.ToString(),"\"tunnel_ready\"\\s*:\\s*true");}
+        lock(output){args.Result=Regex.IsMatch(output.ToString(),"\"config_saved\"\\s*:\\s*true");}
       }
     };
     key.Clear();typed=null;
@@ -251,12 +254,16 @@ internal sealed class RemoteDesktopConfigure : Form {
       busy=false;go.Enabled=true;refresh.Enabled=true;work.Dispose();
       if(IsDisposed)return;
       if(args.Error==null && args.Result is bool && (bool)args.Result){
-        saved=true;SetMask();status.Text="Local Tunnel: Connected";status.ForeColor=Color.DarkGreen;
-        hint.Text="Local Tunnel connected. Click Open ChatGPT, add the Tunnel plugin, then test its tools.";
+        saved=true;SetMask();
+        hint.Text=serviceRunning
+          ? "Configuration saved. Stop and start the service to apply changes."
+          : "Configuration saved. Click Start Service to connect.";
+        status.Text=serviceRunning ? "Local Tunnel: running (previous settings until restart)" : "Local Tunnel: stopped";
+        status.ForeColor=Color.DarkGoldenrod;
       }else{
-        RestoreFields();status.Text="Local Tunnel: setup failed or not ready";
+        RestoreFields();status.Text="Local Tunnel: configuration save failed";
         status.ForeColor=Color.DarkRed;
-        hint.Text="Setup failed. Check Tunnel ID, credentials and local runtime logs.";
+        hint.Text="Save failed. Check Tunnel ID, key and local runtime logs. The service was not started.";
       }
       UpdateStatus();
     };
@@ -268,10 +275,12 @@ internal sealed class RemoteDesktopConfigure : Form {
       ? placeholder && key.Text == Mask && id.Text == SavedId()
       : key.Text.Length == 0;
     return Icon!=null && key.UseSystemPasswordChar && maskSafe
+      && go.Location.X < service.Location.X && service.Location.X < refresh.Location.X
+      && refresh.Text=="Refresh Status"
       && service.Text=="Start Service" && autostart.Text=="Auto-start at Windows sign-in"
       && Process.GetCurrentProcess().ProcessName == "RemoteDesktopMCP-Configure"
       && chat.Text=="Open ChatGPT Plugins" && status.Text.Contains("Tunnel")
-      && plugin.Text.Contains("ChatGPT") && go.Text=="Configure and Start";
+      && plugin.Text.Contains("ChatGPT") && go.Text=="Save";
   }
   [STAThread]
   static int Main(string[] args){

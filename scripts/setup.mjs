@@ -57,19 +57,24 @@ async function setup() {
     const port = active ? saved.port : await freePort(saved.port || 18832);
     if (flags.has('--background') && saved.manager && saved.manager !== 'background') throw new Error('Existing setup uses systemd; keep its deployment mode');
     const manager = saved.manager || (flags.has('--background') ? 'background' : defaultManager());
-    if (active && manager === 'background' && (id !== saved.id || tunnel !== saved.tunnel || apiKey !== readPrivateJSON(credentials).apiKey)) throw new Error('Stop the managed runtime before changing its configuration: npm run stop');
+    if (active && manager === 'background' && !flags.has('--configure-only') && (id !== saved.id || tunnel !== saved.tunnel || apiKey !== readPrivateJSON(credentials).apiKey))
+      throw new Error('Stop the managed runtime before changing its configuration: npm run stop');
     const config = { mcp: { filter_log_notifications: true }, tunnel: { id, api_key_env: 'OPENAI_API_KEY', health_port: port } };
     const toml = `[mcp]\nfilter_log_notifications = true\n\n[tunnel]\nid = ${JSON.stringify(id)}\napi_key_env = "OPENAI_API_KEY"\nhealth_port = ${port}\n`;
     const configFile = path.join(root, 'config.toml');
     if (fs.existsSync(configFile) && !saved.id) throw new Error('Existing config.toml was not created by this wizard. Move it aside or migrate it explicitly first.');
-    if (active && manager !== 'background') await stop();
+    // Save-only must not stop the running service or change login startup.
+    // New settings take effect on the next explicit service start.
+    if (active && manager !== 'background' && !flags.has('--configure-only')) await stop();
     privateWrite(configFile, toml, { secureParent: false });
     privateWrite(credentials, JSON.stringify({ apiKey }));
     privateWrite(path.join(dir, 'tunnel.yaml'), JSON.stringify(tunnelConfig(config), null, 2));
     privateWrite(stateFile, JSON.stringify({ id, tunnel, tunnelArgs, port, manager }));
     console.log('Local MCP passed; private configuration saved / 本地 MCP 通过，私有配置已保存。');
     if (flags.has('--configure-only')) {
-      console.log('Runtime not started (--configure-only). ChatGPT registration: pending / 未启动隧道，MCP 注册待完成。'); return;
+      console.log('Runtime not started or changed (--configure-only).');
+      console.log(JSON.stringify({ config_saved: true, service_changed: false,
+        restart_required: Boolean(active), chatgpt_registration: 'not_verified' })); return;
     }
     await start(manager);
     let ready = false;

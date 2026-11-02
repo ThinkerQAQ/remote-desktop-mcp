@@ -36,6 +36,7 @@ export function taskScript(action) {
   const ownership = `$t=Get-ScheduledTask -TaskName ${task} -ErrorAction SilentlyContinue; if ($t) { $a=$t.Actions[0]; if ($t.Actions.Count -ne 1 -or $a.Execute -notmatch '(?i)(^|[\\\\/])wscript\\.exe$' -or $a.Arguments -ne ${psQuote('"' + launcher + '"')}) { throw 'Task name collision' } }`;
   if (action === 'auto-status') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { 'missing' } elseif ($t.State -eq 'Disabled') { 'disabled' } else { 'enabled' }`;
   if (action === 'auto-enable') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { throw 'Task missing' }; Enable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null`;
+  if (action === 'start-task') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t -or $t.State -eq 'Disabled') { throw 'Logon task not enabled' }; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop`;
   if (action === 'auto-disable') return `$ErrorActionPreference='Stop'; ${ownership}; if ($t) { Disable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null }`;
   if (!['start','register'].includes(action)) throw new Error('Unknown task action');
   const registration = `$ErrorActionPreference='Stop'; ${ownership}; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(host)} -Argument ${psQuote('"' + launcher + '"')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${task} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null`;
@@ -131,10 +132,12 @@ export async function start(manager) {
     privateWrite(plistFile, launchPlist());
     call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]);
     if (call('launchctl', ['bootstrap', `gui/${process.getuid()}`, plistFile]).status !== 0) throw new Error('LaunchAgent setup failed; use --background if no GUI login domain is available');
-  } else if (manager === 'scheduled-task' && windowsAutostartEnabled() !== false) {
-    if (powershell(taskScript('start')).status !== 0) throw new Error('Scheduled task setup failed; account policy may require --background');
+  } else if (manager === 'scheduled-task' && windowsAutostartEnabled() === true) {
+    // Only explicitly opted-in installations run via a login startup task.
+    if (powershell(taskScript('start-task')).status !== 0)
+      throw new Error('Cannot start Windows logon task');
   } else {
-    // Auto-start OFF: launch manually without changing the disabled logon task.
+    // Auto-start OFF or never configured: manual start never creates a login task.
     const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW || 0), 0o600);
     try {
       const child = spawn(process.execPath, [runtimeScript, 'run'], { detached: true, stdio: ['ignore', fd, fd], windowsHide: true });

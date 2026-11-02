@@ -30,6 +30,8 @@ test('native manager definitions escape paths and never embed credentials', () =
   assert.match(taskScript('auto-enable'), /Enable-ScheduledTask/);
   assert.match(taskScript('auto-disable'), /Disable-ScheduledTask/);
   assert.match(taskScript('register'), /-AtLogOn/);
+  assert.match(taskScript('start-task'), /Start-ScheduledTask/);
+  assert.doesNotMatch(taskScript('start-task'), /Register-ScheduledTask/);
   assert.doesNotMatch(taskScript('auto-disable'), /Stop-ScheduledTask/);
   assert.doesNotMatch(taskScript('auto-disable'), /Start-ScheduledTask/);
 

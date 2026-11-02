@@ -142,6 +142,21 @@ for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'nati
     assert.equal(JSON.parse(status.output).tunnel_ready, true);
     result = await run(process.execPath, [...args, '--configure-only'], reused);
     assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /"config_saved":true/);
+    // Saving while connected must not stop the Tunnel or recreate its manager.
+    let afterSave = await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'status'], reused);
+    assert.equal(afterSave.code, 0, afterSave.output);
+    assert.equal(JSON.parse(afterSave.output).tunnel_ready, true, 'Save must not stop a running service');
+    // Change both Tunnel ID and key without touching the running process.
+    const edited = { ...reused, DV_TUNNEL_ID: 'tunnel_EXAMPLE_CHANGED', DV_RUNTIME_API_KEY: 'synthetic-changed-key' };
+    result = await run(process.execPath, [...args, '--configure-only'], edited);
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /"config_saved":true/);
+    assert.match(result.output, /"restart_required":true/);
+    afterSave = await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'status'], reused);
+    assert.equal(JSON.parse(afterSave.output).tunnel_ready, true, 'Editing active config must not restart/disconnect');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'runtime/setup.json'), 'utf8')).id, edited.DV_TUNNEL_ID);
+    assert.equal(JSON.parse(fs.readFileSync(credentials, 'utf8')).apiKey, edited.DV_RUNTIME_API_KEY);
   } finally {
     if (started) await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'stop'], env);
     if (native && process.platform === 'win32') {
