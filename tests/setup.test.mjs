@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
 import { privateWrite, privateDir } from '../scripts/private-files.mjs';
-import { unitQuote } from '../scripts/runtime.mjs';
+import { unitQuote, taskScript } from '../scripts/runtime.mjs';
 import { isDirectExecution } from '../scripts/entrypoint.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -33,6 +33,15 @@ test('reject missing/multiline credentials and malformed tunnel identity', () =>
   assert.throws(() => unitQuote('/path\nnew'));
 });
 
+test('Windows scheduled task uses windowless launcher without exposing credentials', () => {
+  const start = taskScript('start');
+  assert.match(start, /wscript.exe/);
+  assert.match(start, /windows-hidden-launch.vbs/);
+  assert.doesNotMatch(start, /OPENAI_API_KEY|DV_RUNTIME_API_KEY|tunnel_[A-Za-z0-9]+/);
+  const launcher = fs.readFileSync(path.join(root, 'scripts/windows-hidden-launch.vbs'), 'utf8');
+  assert.match(launcher, /shell.Run\(cmd, 0, True\)/);
+});
+
 test('occupied preferred port chooses another loopback port', async () => {
   const server = net.createServer();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -45,7 +54,9 @@ test('Windows private directories/files have explicit current-user-only ACLs', {
   const file = path.join(dir, 'credential.json');
   try {
     privateDir(dir);
+    privateDir(dir); // Already private: no redundant Windows ACL update.
     privateWrite(file, '{"synthetic":true}');
+    privateWrite(file, '{"synthetic":true}'); // Atomic overwrite remains protected.
     const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @($id,'S-1-5-32-544','S-1-5-18'))) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
     const env = { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file };
     for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];

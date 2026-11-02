@@ -30,8 +30,11 @@ export function launchPlist() {
 }
 export function taskScript(action) {
   if (action === 'stop') return `Stop-ScheduledTask -TaskName ${psQuote(label)} -ErrorAction Stop`;
-  // No credentials appear in task definitions or command arguments.
-  return `$ErrorActionPreference='Stop'; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(process.execPath)} -Argument ${psQuote('"' + runtimeScript + '" run')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${psQuote(label)} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName ${psQuote(label)}`;
+  // Run the Windows user-level service without an interactive console.
+  // No credentials or Tunnel IDs appear in task definitions or command arguments.
+  const host = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
+  const launcher = path.join(root, 'scripts/windows-hidden-launch.vbs');
+  return `$ErrorActionPreference='Stop'; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(host)} -Argument ${psQuote('"' + launcher + '"')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${psQuote(label)} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName ${psQuote(label)}`;
 }
 function powershell(script) {
   // Windows PowerShell 5.1 must resolve its own built-in modules. GitHub Actions
@@ -121,7 +124,16 @@ async function run() {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   privateWrite(path.join(dir, 'control.json'), JSON.stringify({ port: server.address().port, token }));
   const args = ['run', '--config', path.join(dir, 'tunnel.yaml')];
-  child = spawn(s.tunnel, [...(s.tunnelArgs || []), ...args], { env: { ...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey }, stdio: 'inherit', windowsHide: true });
+  // Scheduled tasks have no interactive output. Log privately instead of
+  // opening a console window or forwarding logs to the ChatGPT conversation.
+  const logFile = path.join(dir, 'tunnel.log');
+  const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY, 0o600);
+  try {
+    child = spawn(s.tunnel, [...(s.tunnelArgs || []), ...args], {
+      env: { ...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey },
+      stdio: ['ignore', fd, fd], windowsHide: true
+    });
+  } finally { fs.closeSync(fd); }
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, terminate);
   const finish = code => { server.close(); server.closeAllConnections(); process.exitCode = stopping ? 0 : (code ?? 1); };
   child.once('error', () => finish(1)); child.once('exit', finish);
