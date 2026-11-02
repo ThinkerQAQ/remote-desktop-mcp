@@ -77,7 +77,7 @@ jobs:
             --output "dist/RemoteDesktopMCP-v${version}-${{ matrix.target }}-${{ matrix.arch }}.${{ matrix.extension }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: remote-desktop-mcp-${{ matrix.target }}-${{ matrix.arch }}-offline
+          name: RemoteDesktopMCP-${{ matrix.target }}-${{ matrix.arch }}-offline
           path: dist/RemoteDesktopMCP-*.${{ matrix.extension }}
           if-no-files-found: error
           retention-days: 14

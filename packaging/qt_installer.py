@@ -57,19 +57,20 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     meta.mkdir(parents=True)
     shutil.copytree(stage, data)
     write_xml(config / "config.xml", "Installer", {
-        "Name": "Remote Desktop MCP",
+        "Name": "RemoteDesktopMCP",
         "Version": version,
-        "Title": "Remote Desktop MCP",
+        "Title": "RemoteDesktopMCP",
         "Publisher": "ThinkerQAQ",
-        "StartMenuDir": "Remote Desktop MCP",
-        "TargetDir": "@HomeDir@/RemoteDesktopTool",
+        "StartMenuDir": "RemoteDesktopMCP",
+        "TargetDir": "@HomeDir@/RemoteDesktopMCP",
         "RemoveTargetDir": "false",
-        "MaintenanceToolName": "RemoteDesktop-Maintenance",
+        "MaintenanceToolName": "RemoteDesktopMCP-Maintenance",
+        "ControlScript": "controller.qs",
         "WizardStyle": "Modern",
         "WizardShowPageList": "false",
     })
     write_xml(meta / "package.xml", "Package", {
-        "DisplayName": "Remote Desktop MCP",
+        "DisplayName": "RemoteDesktopMCP",
         "Description": "Desktop Commander MCP with bundled Node.js and OpenAI tunnel-client",
         "Version": version,
         "ReleaseDate": datetime.date.today().isoformat(),
@@ -80,10 +81,11 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     user_interfaces = ET.SubElement(tree.getroot(), "UserInterfaces")
     ET.SubElement(user_interfaces, "UserInterface").text = "configure.ui"
     licenses = ET.SubElement(tree.getroot(), "Licenses")
-    ET.SubElement(licenses, "License", {"name": "Remote Desktop MCP (Apache-2.0)", "file": "LICENSE.txt"})
+    ET.SubElement(licenses, "License", {"name": "RemoteDesktopMCP (Apache-2.0)", "file": "LICENSE.txt"})
     ET.indent(tree)
     tree.write(meta / "package.xml", encoding="utf-8", xml_declaration=True)
     shutil.copy2(ASSETS / "configure.ui", meta / "configure.ui")
+    shutil.copy2(ASSETS / "controller.qs", config / "controller.qs")
     shutil.copy2(stage / "LICENSE", meta / "LICENSE.txt")
     script = """
 function Component() {
@@ -97,20 +99,20 @@ Component.prototype.createOperations = function() {
 """
     if target == "windows":
         script += """
-    component.addOperation("Mkdir", "@UserStartMenuProgramsPath@/Remote Desktop MCP");
+    component.addOperation("Mkdir", "@UserStartMenuProgramsPath@/RemoteDesktopMCP");
     component.addOperation("CreateShortcut",
         installer.environmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe",
-        "@UserStartMenuProgramsPath@/Remote Desktop MCP/Configure Remote Desktop MCP.lnk",
+        "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Configure RemoteDesktopMCP.lnk",
         '-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "@TargetDir@/Configure-RemoteDesktop.ps1"',
         "workingDirectory=@TargetDir@");
     component.addOperation("CreateShortcut",
-        "@TargetDir@/RemoteDesktop-Maintenance.exe",
-        "@UserStartMenuProgramsPath@/Remote Desktop MCP/Uninstall.lnk");
+        "@TargetDir@/RemoteDesktopMCP-Maintenance.exe",
+        "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Uninstall.lnk");
 """
     elif target == "linux":
         # Avoid a dependency on desktop environment-specific menu packages.
-        desktop = 'Type=Application\nName=Configure Remote Desktop MCP\nTerminal=true\nExec=/bin/bash "@TargetDir@/Configure-RemoteDesktop.sh"\nCategories=Development;Utility;'
-        script += f'    component.addOperation("CreateDesktopEntry", "remote-desktop-mcp.desktop", {json.dumps(desktop)});\n'
+        desktop = 'Type=Application\nName=Configure RemoteDesktopMCP\nTerminal=true\nExec=/bin/bash "@TargetDir@/Configure-RemoteDesktop.sh"\nCategories=Development;Utility;'
+        script += f'    component.addOperation("CreateDesktopEntry", "remotedesktopmcp.desktop", {json.dumps(desktop)});\n'
     else:
         script += "    // macOS: configuration launcher is provided as a .command file.\n"
     script += """};

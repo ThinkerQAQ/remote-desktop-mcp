@@ -48,6 +48,35 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("-WindowStyle Hidden", script)
             self.assertNotIn("-NoExit", script)
 
+    def test_single_component_and_install_name(self):
+        import xml.etree.ElementTree as ET
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stage = self.fake_stage(root, "windows")
+            dest = root / "out"
+            prepare(stage, dest, "0.4.0", "windows")
+            xml = ET.parse(dest / "config/config.xml")
+            self.assertEqual(xml.findtext("./Name"), "RemoteDesktopMCP")
+            self.assertEqual(xml.findtext("./TargetDir"), "@HomeDir@/RemoteDesktopMCP")
+            self.assertEqual(xml.findtext("./StartMenuDir"), "RemoteDesktopMCP")
+            self.assertEqual(xml.findtext("./ControlScript"), "controller.qs")
+            controller = (dest / "config/controller.qs").read_text()
+            self.assertIn("QInstaller.ComponentSelection, false", controller)
+            self.assertIn("QInstaller.StartMenuSelection, false", controller)
+            package_script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
+            self.assertIn("RemoteDesktopMCP-Maintenance.exe", package_script)
+
+    def test_configuration_links_official_pages(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stage = self.fake_stage(root, "windows")
+            dest = root / "out"
+            prepare(stage, dest, "0.4.0", "windows")
+            page = (dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").read_text()
+            self.assertIn("https://platform.openai.com/settings/organization/tunnels", page)
+            self.assertIn("https://platform.openai.com/settings/organization/api-keys", page)
+            self.assertIn("<bool>true</bool>", page)
+
     def test_refuse_runtime_data(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

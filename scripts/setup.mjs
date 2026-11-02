@@ -25,7 +25,7 @@ async function setup() {
   const flags = new Set(process.argv.slice(2));
   for (const f of flags) if (!['--non-interactive', '--configure-only', '--background'].includes(f)) throw new Error('Unknown setup option');
   const nonInteractive = flags.has('--non-interactive');
-  if (!nonInteractive && !process.stdin.isTTY) throw new Error('Run in an interactive terminal, or pass --non-interactive with DV_TUNNEL_ID and DV_RUNTIME_API_KEY');
+  if (!nonInteractive && !process.stdin.isTTY) throw new Error('Run in an interactive terminal, or pass --non-interactive with DV_TUNNEL_ID and a runtime API key (or reuse credentials saved by this installation)');
   const dir = path.join(root, 'runtime'); privateDir(dir);
   const stateFile = path.join(dir, 'setup.json'), credentials = path.join(dir, 'credentials.json');
   let saved = {};

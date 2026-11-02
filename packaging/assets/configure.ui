@@ -4,11 +4,19 @@
  <widget class="QWidget" name="ConfigureConnection">
   <layout class="QVBoxLayout" name="verticalLayout">
    <item><widget class="QLabel" name="titleLabel">
-    <property name="text"><string>Remote Desktop MCP has been installed</string></property>
+    <property name="text"><string>RemoteDesktopMCP has been installed</string></property>
    </widget></item>
    <item><widget class="QLabel" name="descriptionLabel">
-    <property name="text"><string>Node.js, Desktop Commander, and OpenAI Tunnel Client are bundled. To connect ChatGPT, create your own Tunnel ID and supply a runtime key locally. Configuration is optional and does not reuse old connections.</string></property>
+    <property name="text"><string>Node.js, Desktop Commander and Tunnel Client are installed. Create a Tunnel ID and a runtime API key before configuring the new connection. On an existing installation, saved credentials can be reused.</string></property>
     <property name="wordWrap"><bool>true</bool></property>
+   </widget></item>
+   <item><widget class="QLabel" name="tunnelHelpLink">
+    <property name="text"><string>&lt;a href="https://platform.openai.com/settings/organization/tunnels"&gt;Create or manage Tunnel ID (OpenAI Platform)&lt;/a&gt;</string></property>
+    <property name="openExternalLinks"><bool>true</bool></property>
+   </widget></item>
+   <item><widget class="QLabel" name="apiKeyHelpLink">
+    <property name="text"><string>&lt;a href="https://platform.openai.com/settings/organization/api-keys"&gt;Create runtime API key (OpenAI Platform)&lt;/a&gt;</string></property>
+    <property name="openExternalLinks"><bool>true</bool></property>
    </widget></item>
    <item><widget class="QCheckBox" name="configureNowCheckBox">
     <property name="text"><string>Configure a NEW ChatGPT Tunnel now (opens local terminal)</string></property>

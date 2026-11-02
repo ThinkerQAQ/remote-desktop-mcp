@@ -15,67 +15,86 @@ $setup = Join-Path $root 'scripts\setup.mjs'
 foreach ($required in @($node, $tunnel, $setup)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         $message = "Missing bundled executable or script: $required"
-        [System.Windows.Forms.MessageBox]::Show($message, 'Remote Desktop MCP', 'OK', 'Error') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show($message, 'RemoteDesktopMCP', 'OK', 'Error') | Out-Null
         throw $message
     }
 }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'Remote Desktop MCP - Configure Tunnel'
-$form.Size = New-Object System.Drawing.Size(580, 365)
-$form.MinimumSize = New-Object System.Drawing.Size(580, 365)
+$form.Text = 'RemoteDesktopMCP - Configure Tunnel'
+$form.Size = New-Object System.Drawing.Size(620, 430)
+$form.MinimumSize = New-Object System.Drawing.Size(620, 430)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 
 $title = New-Object System.Windows.Forms.Label
 $title.Location = New-Object System.Drawing.Point(20, 16)
-$title.Size = New-Object System.Drawing.Size(525, 40)
-$title.Text = 'Connect this Windows computer to a NEW ChatGPT Tunnel.'
+$title.Size = New-Object System.Drawing.Size(580, 30)
+$title.Text = 'Configure a new ChatGPT connection on this Windows computer.'
 $form.Controls.Add($title)
+
+# User-facing links are opened in the default browser and not handled by a local server.
+$tunnelLink = New-Object System.Windows.Forms.LinkLabel
+$tunnelLink.Location = New-Object System.Drawing.Point(20, 53)
+$tunnelLink.Size = New-Object System.Drawing.Size(580, 23)
+$tunnelLink.Text = 'Step 1: Create / manage Tunnel ID'
+$tunnelLink.Add_LinkClicked({
+    [System.Diagnostics.Process]::Start('https://platform.openai.com/settings/organization/tunnels') | Out-Null
+})
+$form.Controls.Add($tunnelLink)
+
+$keyLink = New-Object System.Windows.Forms.LinkLabel
+$keyLink.Location = New-Object System.Drawing.Point(20, 80)
+$keyLink.Size = New-Object System.Drawing.Size(580, 23)
+$keyLink.Text = 'Step 2: Create runtime API key (new installations)'
+$keyLink.Add_LinkClicked({
+    [System.Diagnostics.Process]::Start('https://platform.openai.com/settings/organization/api-keys') | Out-Null
+})
+$form.Controls.Add($keyLink)
 
 $idLabel = New-Object System.Windows.Forms.Label
 $idLabel.Text = 'Tunnel ID'
-$idLabel.Location = New-Object System.Drawing.Point(20, 68)
+$idLabel.Location = New-Object System.Drawing.Point(20, 120)
 $idLabel.AutoSize = $true
 $form.Controls.Add($idLabel)
 
 $idBox = New-Object System.Windows.Forms.TextBox
-$idBox.Location = New-Object System.Drawing.Point(175, 65)
-$idBox.Size = New-Object System.Drawing.Size(360, 26)
+$idBox.Location = New-Object System.Drawing.Point(175, 117)
+$idBox.Size = New-Object System.Drawing.Size(405, 26)
 $idBox.TabIndex = 0
 $form.Controls.Add($idBox)
 
 $keyLabel = New-Object System.Windows.Forms.Label
 $keyLabel.Text = 'Runtime API key'
-$keyLabel.Location = New-Object System.Drawing.Point(20, 108)
+$keyLabel.Location = New-Object System.Drawing.Point(20, 160)
 $keyLabel.AutoSize = $true
 $form.Controls.Add($keyLabel)
 
 $keyBox = New-Object System.Windows.Forms.TextBox
-$keyBox.Location = New-Object System.Drawing.Point(175, 105)
-$keyBox.Size = New-Object System.Drawing.Size(360, 26)
+$keyBox.Location = New-Object System.Drawing.Point(175, 157)
+$keyBox.Size = New-Object System.Drawing.Size(405, 26)
 $keyBox.PasswordChar = '*'
 $keyBox.TabIndex = 1
 $form.Controls.Add($keyBox)
 
 $help = New-Object System.Windows.Forms.Label
-$help.Location = New-Object System.Drawing.Point(20, 146)
-$help.Size = New-Object System.Drawing.Size(525, 38)
-$help.Text = 'The key is never displayed or passed on the command line. Existing WSL tunnels are unchanged.'
+$help.Location = New-Object System.Drawing.Point(20, 199)
+$help.Size = New-Object System.Drawing.Size(580, 45)
+$help.Text = 'Step 3: Configure. The API key is required for a new connection; leave it blank only when this installation already has saved credentials. Old WSL tunnels are not changed.'
 $form.Controls.Add($help)
 
 $startButton = New-Object System.Windows.Forms.Button
-$startButton.Location = New-Object System.Drawing.Point(320, 195)
+$startButton.Location = New-Object System.Drawing.Point(360, 254)
 $startButton.Size = New-Object System.Drawing.Size(215, 33)
 $startButton.Text = 'Configure and Start'
 $startButton.TabIndex = 2
 $form.Controls.Add($startButton)
 
 $status = New-Object System.Windows.Forms.Label
-$status.Location = New-Object System.Drawing.Point(20, 242)
-$status.Size = New-Object System.Drawing.Size(525, 75)
-$status.Text = 'Ready. Enter a new Tunnel ID and runtime API key.'
+$status.Location = New-Object System.Drawing.Point(20, 307)
+$status.Size = New-Object System.Drawing.Size(580, 85)
+$status.Text = 'Ready. Follow the links above, then configure.'
 $form.Controls.Add($status)
 
 $script:childProcess = $null
@@ -90,8 +109,10 @@ $startButton.Add_Click({
             [System.Windows.Forms.MessageBox]::Show('Enter a valid new Tunnel ID.', 'Invalid Tunnel ID', 'OK', 'Warning') | Out-Null
             return
         }
-        if ([string]::IsNullOrWhiteSpace($key)) {
-            [System.Windows.Forms.MessageBox]::Show('Runtime API key is required.', 'Missing API key', 'OK', 'Warning') | Out-Null
+        $savedCredentials = (Test-Path -LiteralPath (Join-Path $root 'runtime\credentials.json') -PathType Leaf) -and
+                            (Test-Path -LiteralPath (Join-Path $root 'runtime\setup.json') -PathType Leaf)
+        if ([string]::IsNullOrWhiteSpace($key) -and -not $savedCredentials) {
+            [System.Windows.Forms.MessageBox]::Show('This is a new installation. Create a runtime API key using the link above. Tunnel ID alone cannot authenticate.', 'Runtime API key required', 'OK', 'Warning') | Out-Null
             return
         }
         $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -103,7 +124,12 @@ $startButton.Add_Click({
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError = $true
         $psi.EnvironmentVariables['DV_TUNNEL_ID'] = $id
-        $psi.EnvironmentVariables['DV_RUNTIME_API_KEY'] = $key
+        # When empty, let setup.mjs reuse this installation's private key.
+        if (-not [string]::IsNullOrWhiteSpace($key)) {
+            $psi.EnvironmentVariables['DV_RUNTIME_API_KEY'] = $key
+        } else {
+            $psi.EnvironmentVariables.Remove('DV_RUNTIME_API_KEY')
+        }
         $psi.EnvironmentVariables['DV_TUNNEL_CLIENT'] = $tunnel
         $psi.EnvironmentVariables['PATH'] = (Join-Path $root 'bin') + ';' + $env:PATH
         $psi.EnvironmentVariables['PUPPETEER_SKIP_DOWNLOAD'] = 'true'
@@ -153,12 +179,12 @@ $timer.Add_Tick({
 $form.Add_FormClosing({
     if ($script:childProcess -and -not $script:childProcess.HasExited) {
         $_.Cancel = $true
-        [System.Windows.Forms.MessageBox]::Show('Configuration is still running. Complete the setup before closing this window.', 'Remote Desktop MCP', 'OK', 'Information') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show('Configuration is still running. Complete the setup before closing this window.', 'RemoteDesktopMCP', 'OK', 'Information') | Out-Null
     }
 })
 
 if ($SelfTest) {
-    if ($form.Controls.Count -lt 7 -or -not $startButton.Enabled -or -not $keyBox.PasswordChar) {
+    if ($form.Controls.Count -lt 9 -or -not $startButton.Enabled -or -not $keyBox.PasswordChar -or $tunnelLink.Text -notlike '*Tunnel ID*' -or $keyLink.Text -notlike '*API key*') {
         throw 'Configuration GUI controls failed validation.'
     }
     Write-Output 'WINDOWS_CONFIG_GUI_SELFTEST_PASS'
