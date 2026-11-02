@@ -41,9 +41,93 @@ jobs:
         shell: bash
         run: |
           bash -n setup.sh install.sh
+  native-installer:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows
+            arch: amd64
+            extension: exe
+          - os: ubuntu-24.04
+            target: linux
+            arch: amd64
+            extension: run
+          - os: macos-15
+            target: darwin
+            arch: amd64
+            extension: dmg
+    runs-on: ${{ matrix.os }}
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - run: npm run smoke
+      - name: Test offline installer security and metadata
+        run: python -m unittest discover -s packaging/tests -v
+      - name: Install Qt Installer Framework builder
+        uses: jurplel/install-qt-action@v4
+        with:
+          no-qt-binaries: 'true'
+          tools: tools_ifw
+      - name: Build fully bundled payload from verified releases
+        run: python packaging/stage_runtime.py --platform ${{ matrix.target }} --arch ${{ matrix.arch }} --output dist/stage
+      - name: Confirm bundled MCP works without system Node
+        shell: bash
+        run: |
+          if [[ '${{ matrix.target }}' == 'windows' ]]; then
+            dist/stage/bin/node.exe dist/stage/scripts/smoke.mjs
+          else
+            dist/stage/bin/node dist/stage/scripts/smoke.mjs
+          fi
+      - name: Verify Windows branded native management entrypoints
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($entry in @("dist/stage/bin/RemoteDesktopMCP-Configure.exe", "dist/stage/RemoteDesktopMCP-Maintenance.exe")) {
+            if (!(Test-Path $entry)) { throw "Missing native GUI entrypoint: $entry" }
+            $process = Start-Process -FilePath (Resolve-Path $entry).Path -ArgumentList "--self-test" -Wait -PassThru
+            if ($process.ExitCode -ne 0) { throw "Native GUI selftest failed ($($process.ExitCode)): $entry" }
+          }
+      - name: Verify Windows first-run GUI works without terminal TTY
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "dist/stage/Configure-RemoteDesktop.ps1" -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configuration GUI self test failed' }
+      - name: Build native offline Qt installer
+        shell: bash
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          python packaging/qt_installer.py \
+            --platform "${{ matrix.target }}" --stage dist/stage \
+            --version "$version" \
+            --output "dist/RemoteDesktopMCP-v${version}-${{ matrix.target }}-${{ matrix.arch }}.${{ matrix.extension }}"
+      - name: Verify Windows installer does not open a console
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; from packaging.windows_gui_template import WINDOWS_GUI, pe_subsystem; files = list(Path('dist').glob('RemoteDesktopMCP-v*-windows-amd64.exe')); assert len(files) == 1, files; assert pe_subsystem(files[0]) == WINDOWS_GUI, 'Windows installer must use GUI subsystem'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-RemoteDesktopMCP-${{ matrix.target }}-${{ matrix.arch }}-offline
+          path: dist/RemoteDesktopMCP-*.${{ matrix.extension }}
+          if-no-files-found: error
+          retention-days: 14
   publish:
     name: Build and publish verified artifacts
-    needs: verify
+    needs: [verify, native-installer]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -57,6 +141,21 @@ jobs:
           test -f THIRD_PARTY_NOTICES.md
           test -f README.md
           test -f README_ZH.md
+      - name: Download the three verified native installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-RemoteDesktopMCP-*-offline
+          path: dist
+          merge-multiple: true
+      - name: Verify native installer filenames
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          for artifact in             "RemoteDesktopMCP-v${version}-windows-amd64.exe"             "RemoteDesktopMCP-v${version}-linux-amd64.run"             "RemoteDesktopMCP-v${version}-darwin-amd64.dmg"; do
+            test -s "dist/$artifact"
+            echo "Verified release artifact: $artifact"
+          done
       - name: Build three platform archives
         shell: bash
         run: |
@@ -68,7 +167,7 @@ jobs:
           git archive --format=tar --prefix="$prefix/" HEAD | gzip -n > "dist/remote-desktop-mcp-${GITHUB_REF_NAME}-macos.tar.gz"
           (
             cd dist
-            sha256sum *.zip *.tar.gz > SHA256SUMS
+            sha256sum *.zip *.tar.gz RemoteDesktopMCP-*.* > SHA256SUMS
             sha256sum -c SHA256SUMS
           )
           unzip -Z1 "dist/remote-desktop-mcp-${GITHUB_REF_NAME}-windows.zip" | grep -Fx "$prefix/LICENSE"

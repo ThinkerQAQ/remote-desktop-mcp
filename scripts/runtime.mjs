@@ -30,8 +30,17 @@ export function launchPlist() {
 }
 export function taskScript(action) {
   if (action === 'stop') return `Stop-ScheduledTask -TaskName ${psQuote(label)} -ErrorAction Stop`;
-  // No credentials appear in task definitions or command arguments.
-  return `$ErrorActionPreference='Stop'; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(process.execPath)} -Argument ${psQuote('"' + runtimeScript + '" run')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${psQuote(label)} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null; Start-ScheduledTask -TaskName ${psQuote(label)}`;
+  const host = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
+  const launcher = path.join(root, 'scripts/windows-hidden-launch.vbs');
+  const task = psQuote(label);
+  const ownership = `$t=Get-ScheduledTask -TaskName ${task} -ErrorAction SilentlyContinue; if ($t) { $a=$t.Actions[0]; if ($t.Actions.Count -ne 1 -or $a.Execute -notmatch '(?i)(^|[\\\\/])wscript\\.exe$' -or $a.Arguments -ne ${psQuote('"' + launcher + '"')}) { throw 'Task name collision' } }`;
+  if (action === 'auto-status') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { 'missing' } elseif ($t.State -eq 'Disabled') { 'disabled' } else { 'enabled' }`;
+  if (action === 'auto-enable') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { throw 'Task missing' }; Enable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null`;
+  if (action === 'start-task') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t -or $t.State -eq 'Disabled') { throw 'Logon task not enabled' }; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop`;
+  if (action === 'auto-disable') return `$ErrorActionPreference='Stop'; ${ownership}; if ($t) { Disable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null }`;
+  if (!['start','register'].includes(action)) throw new Error('Unknown task action');
+  const registration = `$ErrorActionPreference='Stop'; ${ownership}; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(host)} -Argument ${psQuote('"' + launcher + '"')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${task} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null`;
+  return action === 'start' ? registration + `; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop` : registration;
 }
 function powershell(script) {
   // Windows PowerShell 5.1 must resolve its own built-in modules. GitHub Actions
@@ -41,6 +50,35 @@ function powershell(script) {
   return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
     { env, encoding: 'utf8', timeout: 30000, windowsHide: true, stdio: 'pipe' });
 }
+export function windowsAutostartEnabled() {
+  if (process.platform !== 'win32') return null;
+  const result = powershell(taskScript('auto-status'));
+  if (result.status !== 0) throw new Error('Cannot inspect Windows scheduled task');
+  const text = result.stdout.trim().split(/\r?\n/).pop();
+  if (text === 'enabled') return true;
+  if (text === 'disabled') return false;
+  if (text === 'missing') return null;
+  throw new Error('Unexpected Windows scheduled task state');
+}
+export function setWindowsAutostart(enabled) {
+  if (process.platform !== 'win32' || state().manager !== 'scheduled-task')
+    throw new Error('Windows scheduled-task startup is not configured');
+  const current = windowsAutostartEnabled();
+  if (current === enabled) return current;
+  if (current === null) {
+    // An explicitly disabled initial state must persist, including across
+    // subsequent manual starts, instead of recreating an enabled logon task.
+    if (powershell(taskScript('register')).status !== 0)
+      throw new Error('Cannot register user-level Windows task');
+    if (!enabled && powershell(taskScript('auto-disable')).status !== 0)
+      throw new Error('Cannot disable Windows logon task');
+  } else if (powershell(taskScript(enabled ? 'auto-enable' : 'auto-disable')).status !== 0) {
+    throw new Error('Cannot change Windows logon auto-start');
+  }
+  if (windowsAutostartEnabled() !== enabled) throw new Error('Windows scheduled task did not retain state');
+  return enabled;
+}
+
 async function control(action = 'status') {
   try {
     const c = readPrivateJSON(path.join(dir, 'control.json'));
@@ -64,7 +102,7 @@ export async function health(port) {
 export async function status() {
   const s = state();
   const managed = await control() || (s.manager === 'systemd' && systemctl(['is-active', '--quiet', unitName]).status === 0) || (s.manager === 'background' && Boolean(ownedProcess()));
-  return { managed_process_running: Boolean(managed), tunnel_ready: Boolean(managed) && await health(s.port), chatgpt_registration: 'not_verified' };
+  return { managed_process_running: Boolean(managed), tunnel_ready: Boolean(managed) && await health(s.port), manager: s.manager, autostart_enabled: s.manager === 'scheduled-task' ? windowsAutostartEnabled() : null, chatgpt_registration: 'not_verified' };
 }
 export async function stop() {
   const s = state();
@@ -94,9 +132,12 @@ export async function start(manager) {
     privateWrite(plistFile, launchPlist());
     call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]);
     if (call('launchctl', ['bootstrap', `gui/${process.getuid()}`, plistFile]).status !== 0) throw new Error('LaunchAgent setup failed; use --background if no GUI login domain is available');
-  } else if (manager === 'scheduled-task') {
-    if (powershell(taskScript('start')).status !== 0) throw new Error('Scheduled task setup failed; account policy may require --background');
+  } else if (manager === 'scheduled-task' && windowsAutostartEnabled() === true) {
+    // Only explicitly opted-in installations run via a login startup task.
+    if (powershell(taskScript('start-task')).status !== 0)
+      throw new Error('Cannot start Windows logon task');
   } else {
+    // Auto-start OFF or never configured: manual start never creates a login task.
     const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW || 0), 0o600);
     try {
       const child = spawn(process.execPath, [runtimeScript, 'run'], { detached: true, stdio: ['ignore', fd, fd], windowsHide: true });
@@ -121,7 +162,16 @@ async function run() {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   privateWrite(path.join(dir, 'control.json'), JSON.stringify({ port: server.address().port, token }));
   const args = ['run', '--config', path.join(dir, 'tunnel.yaml')];
-  child = spawn(s.tunnel, [...(s.tunnelArgs || []), ...args], { env: { ...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey }, stdio: 'inherit', windowsHide: true });
+  // Scheduled tasks have no interactive output. Log privately instead of
+  // opening a console window or forwarding logs to the ChatGPT conversation.
+  const logFile = path.join(dir, 'tunnel.log');
+  const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY, 0o600);
+  try {
+    child = spawn(s.tunnel, [...(s.tunnelArgs || []), ...args], {
+      env: { ...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey },
+      stdio: ['ignore', fd, fd], windowsHide: true
+    });
+  } finally { fs.closeSync(fd); }
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, terminate);
   const finish = code => { server.close(); server.closeAllConnections(); process.exitCode = stopping ? 0 : (code ?? 1); };
   child.once('error', () => finish(1)); child.once('exit', finish);
@@ -133,6 +183,9 @@ if (isDirectExecution(import.meta.url)) {
     else if (action === 'status') console.log(JSON.stringify(await status(), null, 2));
     else if (action === 'stop') await stop();
     else if (action === 'start') { await start(state().manager); console.log(JSON.stringify(await status(), null, 2)); }
-    else throw new Error('Use start, stop or status');
+    else if (action === 'autostart' && ['enable', 'disable'].includes(process.argv[3]) && process.argv.length === 4) {
+      console.log(JSON.stringify({ autostart_enabled: setWindowsAutostart(process.argv[3] === 'enable') }));
+    }
+    else throw new Error('Use start, stop, status, or autostart enable|disable');
   } catch { console.error('Runtime action failed; run setup to check the local configuration.'); process.exitCode = 1; }
 }

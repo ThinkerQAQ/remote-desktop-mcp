@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
 import { privateWrite, privateDir } from '../scripts/private-files.mjs';
-import { unitQuote } from '../scripts/runtime.mjs';
+import { unitQuote, taskScript } from '../scripts/runtime.mjs';
 import { isDirectExecution } from '../scripts/entrypoint.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -33,6 +33,15 @@ test('reject missing/multiline credentials and malformed tunnel identity', () =>
   assert.throws(() => unitQuote('/path\nnew'));
 });
 
+test('Windows scheduled task uses windowless launcher without exposing credentials', () => {
+  const start = taskScript('start');
+  assert.match(start, /wscript.exe/);
+  assert.match(start, /windows-hidden-launch.vbs/);
+  assert.doesNotMatch(start, /OPENAI_API_KEY|DV_RUNTIME_API_KEY|tunnel_[A-Za-z0-9]+/);
+  const launcher = fs.readFileSync(path.join(root, 'scripts/windows-hidden-launch.vbs'), 'utf8');
+  assert.match(launcher, /shell.Run\(cmd, 0, True\)/);
+});
+
 test('occupied preferred port chooses another loopback port', async () => {
   const server = net.createServer();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -45,12 +54,36 @@ test('Windows private directories/files have explicit current-user-only ACLs', {
   const file = path.join(dir, 'credential.json');
   try {
     privateDir(dir);
+    privateDir(dir); // Already private: no redundant Windows ACL update.
     privateWrite(file, '{"synthetic":true}');
-    const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne $id) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
-    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env: { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file }, encoding: 'utf8', windowsHide: true });
+    privateWrite(file, '{"synthetic":true}'); // Atomic overwrite remains protected.
+    const script = `$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; foreach ($p in @($env:DV_TEST_DIR,$env:DV_TEST_FILE)) { $acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }; if (-not $acl.AreAccessRulesProtected -or ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @($id,'S-1-5-32-544','S-1-5-18'))) { exit 1 }; $rules=$acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier]); if (@($rules | Where-Object { $_.IdentityReference.Value -ne $id }).Count -gt 0) { exit 2 } }`;
+    const env = { ...process.env, DV_TEST_DIR: dir, DV_TEST_FILE: file };
+    for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];
+    const check = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { env, encoding: 'utf8', windowsHide: true });
     assert.equal(check.status, 0, 'Windows ACL verification failed');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('Windows config.toml remains private without changing installer directory ACL', { skip: process.platform !== 'win32' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-install-root-' + process.pid + '-'));
+  const config = path.join(root, 'config.toml');
+  const check = script => spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    env: Object.fromEntries(Object.entries({ ...process.env, DV_TEST_ROOT: root, DV_TEST_CONFIG: config }).filter(([key]) => key.toLowerCase() !== 'psmodulepath')), encoding: 'utf8', windowsHide: true
+  });
+  try {
+    const before = check('(Get-Acl -LiteralPath $env:DV_TEST_ROOT).Sddl');
+    assert.equal(before.status, 0);
+    privateWrite(config, '[tunnel]\\nid = "tunnel_synthetic"\\n', { secureParent: false });
+    const after = check('(Get-Acl -LiteralPath $env:DV_TEST_ROOT).Sddl');
+    assert.equal(after.status, 0);
+    assert.equal(after.stdout.trim(), before.stdout.trim(), 'Installer directory ACL must not be modified');
+    const verify = check("$id=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $acl=Get-Acl -LiteralPath $env:DV_TEST_CONFIG; $rules=@($acl.GetAccessRules($true,$false,[Security.Principal.SecurityIdentifier])); if(!$acl.AreAccessRulesProtected -or $rules.Count -ne 1 -or $rules[0].IdentityReference.Value -ne $id) {exit 1}");
+    assert.equal(verify.status, 0, 'config.toml must be restricted to the current user');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -73,7 +106,11 @@ function run(command, args, env) {
     child.on('error', reject); child.on('close', code => { clearTimeout(timer); resolve({ code, output }); });
   });
 }
-for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && process.platform === 'linux' }, async () => {
+// GitHub-hosted Windows CI has no interactive user logon desktop.
+// Test background service, security and script generation in CI; keep the
+// native scheduled-task end-to-end acceptance on a logged-in Windows device.
+for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'native user startup' : 'background'} manager`, { timeout: 300000, skip: native && (process.platform === 'linux' ||
+  (process.platform === 'win32' && process.env.GITHUB_ACTIONS === 'true')) }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dv-wizard-'));
   let started = false;
   const env = { ...process.env, DV_TUNNEL_ID: 'tunnel_EXAMPLE', DV_RUNTIME_API_KEY: 'synthetic-secret-do-not-print' };
@@ -105,6 +142,21 @@ for (const native of [false, true]) test(`wizard lifecycle with ${native ? 'nati
     assert.equal(JSON.parse(status.output).tunnel_ready, true);
     result = await run(process.execPath, [...args, '--configure-only'], reused);
     assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /"config_saved":true/);
+    // Saving while connected must not stop the Tunnel or recreate its manager.
+    let afterSave = await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'status'], reused);
+    assert.equal(afterSave.code, 0, afterSave.output);
+    assert.equal(JSON.parse(afterSave.output).tunnel_ready, true, 'Save must not stop a running service');
+    // Change both Tunnel ID and key without touching the running process.
+    const edited = { ...reused, DV_TUNNEL_ID: 'tunnel_EXAMPLE_CHANGED', DV_RUNTIME_API_KEY: 'synthetic-changed-key' };
+    result = await run(process.execPath, [...args, '--configure-only'], edited);
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /"config_saved":true/);
+    assert.match(result.output, /"restart_required":true/);
+    afterSave = await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'status'], reused);
+    assert.equal(JSON.parse(afterSave.output).tunnel_ready, true, 'Editing active config must not restart/disconnect');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'runtime/setup.json'), 'utf8')).id, edited.DV_TUNNEL_ID);
+    assert.equal(JSON.parse(fs.readFileSync(credentials, 'utf8')).apiKey, edited.DV_RUNTIME_API_KEY);
   } finally {
     if (started) await run(process.execPath, [path.join(dir, 'scripts/runtime.mjs'), 'stop'], env);
     if (native && process.platform === 'win32') {
