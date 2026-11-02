@@ -37,6 +37,17 @@ class InstallerTests(unittest.TestCase):
                 self.assertNotIn("Runtime API key", script)
                 self.assertTrue((dest / "packages/org.thinkerqaq.remotedesktop/data/node_modules/lib/data/fixture.json").exists())
 
+    def test_windows_config_shortcut_uses_native_gui(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            stage = self.fake_stage(root, "windows")
+            dest = root / "out"
+            prepare(stage, dest, "0.4.0", "windows")
+            script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
+            self.assertIn("-STA", script)
+            self.assertIn("-WindowStyle Hidden", script)
+            self.assertNotIn("-NoExit", script)
+
     def test_refuse_runtime_data(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

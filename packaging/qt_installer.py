@@ -101,7 +101,7 @@ Component.prototype.createOperations = function() {
     component.addOperation("CreateShortcut",
         installer.environmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe",
         "@UserStartMenuProgramsPath@/Remote Desktop MCP/Configure Remote Desktop MCP.lnk",
-        '-NoProfile -ExecutionPolicy Bypass -NoExit -File "@TargetDir@/Configure-RemoteDesktop.ps1"',
+        '-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "@TargetDir@/Configure-RemoteDesktop.ps1"',
         "workingDirectory=@TargetDir@");
     component.addOperation("CreateShortcut",
         "@TargetDir@/RemoteDesktop-Maintenance.exe",
@@ -130,7 +130,7 @@ Component.prototype.finishConfigure = function() {
         script += """
     installer.executeDetached(
         installer.environmentVariable("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe",
-        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit",
+        ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
          "-File", installer.toNativeSeparators(target + "/Configure-RemoteDesktop.ps1")], target);
 """
     elif target == "darwin":

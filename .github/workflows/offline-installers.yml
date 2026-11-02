@@ -61,6 +61,12 @@ jobs:
           else
             dist/stage/bin/node dist/stage/scripts/smoke.mjs
           fi
+      - name: Verify Windows first-run GUI works without terminal TTY
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "dist/stage/Configure-RemoteDesktop.ps1" -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Windows configuration GUI self test failed' }
       - name: Build native offline Qt installer
         shell: bash
         run: |
