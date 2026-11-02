@@ -178,8 +178,26 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="dv-qtifw-") as temp:
         tree = Path(temp)
         prepare(stage, tree, args.version, args.platform)
-        subprocess.run([args.binarycreator, "--offline-only", "-c", str(tree / "config/config.xml"),
-                        "-p", str(tree / "packages"), str(output)], check=True)
+        # Compression level 1 keeps CI build times predictable for the many
+        # small npm files in an otherwise fully self-contained payload.
+        command = [args.binarycreator, "--offline-only", "--compression", "1"]
+        if args.platform == "windows":
+            if __package__:
+                from .windows_gui_template import WINDOWS_GUI, gui_template, pe_subsystem
+            else:
+                from windows_gui_template import WINDOWS_GUI, gui_template, pe_subsystem
+            creator = Path(shutil.which(args.binarycreator) or args.binarycreator).resolve()
+            base = creator.with_name("installerbase.exe")
+            if not base.is_file():
+                raise FileNotFoundError(f"Qt IFW installerbase.exe not found next to binarycreator: {creator}")
+            template = tree / "installerbase-gui.exe"
+            gui_template(base, template)
+            command += ["--template", str(template)]
+        command += ["-c", str(tree / "config/config.xml"),
+                    "-p", str(tree / "packages"), str(output)]
+        subprocess.run(command, check=True)
+        if args.platform == "windows" and pe_subsystem(output) != WINDOWS_GUI:
+            raise ValueError("Generated Qt installer is not a Windows GUI executable")
 
 
 if __name__ == "__main__":
