@@ -1,72 +1,104 @@
-# Remote Desktop MCP (DV)
+# RemoteDesktopMCP
 
 [简体中文](README_ZH.md)
 
-- [1. Introduction](#1-introduction)
-- [2. Quick Start](#2-quick-start)
-- [3. Configuration](#3-configuration)
-- [4. Optional Features](#4-optional-features)
+- [1. Overview](#1-overview)
+- [2. Quick Start: ChatGPT](#2-quick-start-chatgpt)
+- [3. Manage the Connection](#3-manage-the-connection)
+- [4. Other MCP Clients](#4-other-mcp-clients)
 - [5. Development](#5-development)
-- [6. License](#6-license)
+- [6. License and Security](#6-license-and-security)
 
-## 1. Introduction
+## 1. Overview
 
-An AI assistant can help with a coding problem, but it cannot inspect the project on your computer or run a command there simply by talking about it. Remote Desktop MCP gives an MCP-compatible assistant access to the files and terminal of a computer you authorize, through [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander).
+RemoteDesktopMCP connects an authorized computer to ChatGPT through an OpenAI Secure MCP Tunnel. It exposes [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander) tools for files, search, and terminal commands. It **does not** provide screen sharing or mouse/keyboard control.
 
-You can use it with a local MCP client, or connect from ChatGPT through a Secure MCP Tunnel when your account or workspace supports that option. The project provides the connection, setup, and persistent runtime; Desktop Commander provides the tools for reading and editing files, searching, running commands, and managing terminal sessions. **It does not provide graphical screen sharing or mouse control.**
+Installers for Windows, Linux, and macOS bundle Node.js, project dependencies, and the Tunnel Client. **Users installing a Release do not need to install Node.js, npm, or WSL separately.**
 
-## 2. Quick Start
+## 2. Quick Start: ChatGPT
 
-Start with the local MCP connection: install the adapter, add it to your client, then make one read-only tool call. No OpenAI account, tunnel, or API key is required for this first test. To connect ChatGPT remotely afterward, follow [Case 1](#41-case-1-connect-chatgpt-through-a-tunnel).
+The supported flow is **install → configure → start → register → verify**. A custom MCP Tunnel connection must be available to your ChatGPT account or workspace.
 
-### 2.1. Prerequisites
+### 2.1. Download and install
 
-Use **Windows (native PowerShell), Linux, or macOS** with Node.js and npm. The Node.js version must satisfy the requirement in [package.json](package.json) (currently Node 22.12 or later). Windows does not require WSL. The first installation needs network access to the npm registry.
+1. Open the [latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest) and download the **native installer**, not a source archive:
 
-Verify that Node and npm are available in your terminal:
+   | System | Installer |
+   | --- | --- |
+   | Windows x64 | `RemoteDesktopMCP-v*-windows-amd64.exe` |
+   | Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
+   | macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
 
-```powershell
-# Windows PowerShell
-node --version
-npm.cmd --version
-```
+   These packages target **x64/Intel**, not ARM64. Other architectures are not covered by these installers.
+
+2. Run the installer and choose a persistent installation directory. On Linux, first make the downloaded file executable (`chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run`), then run it. On macOS, open the downloaded DMG and launch the installer. On Windows, run the EXE directly.
+
+3. Complete the installation. On Windows, leave **Open RemoteDesktopMCP configuration** checked to open the configuration window. You can reopen it later from **Start → RemoteDesktopMCP → Configure Tunnel**.
+
+No source checkout or `npm ci` is required for this installation path.
+
+### 2.2. Configure the Tunnel
+
+1. Create or select **your own** [Tunnel ID](https://platform.openai.com/settings/organization/tunnels) and obtain a [runtime API key](https://platform.openai.com/settings/organization/api-keys). The Tunnel ID identifies the connection; the key authenticates the local Tunnel Client. Never publish the key.
+2. **Windows:** In **Configure Tunnel**, enter the Tunnel ID and runtime API key, then click **Save**. The key is masked; on later visits, the mask means a key is already stored and can be reused. **Save does not start, stop, or restart the service.**
+3. Click **Start Service**. Use **Refresh Status** and confirm **Local Tunnel: Connected**. If the service is running, this button becomes **Stop Service**.
+4. **Linux/macOS:** Open a terminal in the installed directory and run the included `Configure-RemoteDesktop.sh` (on macOS, the installed `Configure-RemoteDesktop.command` opens it in Terminal). Enter the Tunnel ID and key when prompted. This terminal wizard saves the configuration and starts the user-level runtime. The Windows three-button configuration window is **not** present on these platforms.
+
+A successful local Tunnel status does **not** mean the ChatGPT plugin has been registered.
+
+### 2.3. Register and verify the ChatGPT plugin
+
+1. Open [ChatGPT Plugins](https://chatgpt.com/plugins). Where your account supports custom MCP, add a **custom MCP server → Tunnel**, then choose or enter your saved Tunnel ID and complete the permission prompts. The exact interface can vary; see the [official connection guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt).
+2. In ChatGPT, select the newly registered plugin and make one **read-only** `list_sessions` tool call.
+3. If the call succeeds (including an empty result), ChatGPT can reach the MCP server on your computer.
+
+**Done:** local Tunnel connected **and** ChatGPT read-only tool call succeeds. The computer and its service must remain running for future remote requests.
+
+## 3. Manage the Connection
+
+### 3.1. Windows configuration window
+
+Open **Start → RemoteDesktopMCP → Configure Tunnel**, or run `bin/RemoteDesktopMCP-Configure.exe` from the installation directory.
+
+| Control | Behavior |
+| --- | --- |
+| **Save** | Validate and save the Tunnel ID/key; does not change the running service |
+| **Start Service / Stop Service** | Start or stop the saved Tunnel runtime |
+| **Refresh Status** | Read the current connection state without changing it |
+| **Auto-start at Windows sign-in** | Enable or disable the current user's logon task; changing it does not stop the current connection |
+| **Open ChatGPT Plugins** | Open `https://chatgpt.com/plugins` |
+
+After changing a configuration that is already in use, click **Stop Service** and then **Start Service** to apply the saved settings. Do not run two services using the same Tunnel ID.
+
+To change settings or uninstall the Windows application, use **Start → RemoteDesktopMCP → Manage RemoteDesktopMCP**. Stop the Tunnel and back up private configuration before uninstalling or moving the installation directory.
+
+### 3.2. Linux and macOS commands
+
+Run these commands **from the installation directory**; they use the Node.js runtime bundled in the installer:
 
 ```bash
-# Linux / macOS
-node --version
-npm --version
+./bin/node ./scripts/runtime.mjs status
+./bin/node ./scripts/runtime.mjs stop
+./bin/node ./scripts/runtime.mjs start
 ```
 
-If Node is missing, install a supported version before continuing. The optional [remote setup wizard](#41-case-1-connect-chatgpt-through-a-tunnel) can also provision a compatible local Node runtime.
+Run only the operation you need. To update the Tunnel ID/key, rerun `./Configure-RemoteDesktop.sh` (macOS can use `./Configure-RemoteDesktop.command`). Unlike the Windows Save button, the terminal wizard also starts the service.
 
-### 2.2. Download and install
+Windows uses a **per-user Scheduled Task** if sign-in auto-start is enabled; macOS uses a **LaunchAgent**; Linux uses a **user systemd service** when available, otherwise a background process. Linux fallback mode is not automatically resumed after logout/reboot. These are not privileged system services.
 
-1. Open the [latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest). Download the archive ending in `-windows.zip`, `-linux.tar.gz`, or `-macos.tar.gz` for your operating system. These are **Node.js project archives**, not precompiled executable installers. The OS suffix identifies the intended setup entry point.
-2. Download `SHA256SUMS` from the same Release. Before extraction, compare the archive's SHA-256 with the entry for **that exact filename**. Windows: `Get-FileHash .\*.zip -Algorithm SHA256`; Linux: `sha256sum ./*.tar.gz`; macOS: `shasum -a 256 ./*.tar.gz`. Run the command in the download directory containing the selected archive. Stop if it does not match.
-3. Extract the **entire** archive to a stable directory. Open a terminal **in the extracted folder containing `package.json` and `scripts/proxy.mjs`**. Keep the folder in place after configuring your MCP client; its configuration will reference this absolute path.
-4. Install the locked dependencies and verify the MCP server:
+### 3.3. Troubleshooting
 
-**Windows PowerShell** (replace the directory with your own extracted location):
+- **Connected locally, but the plugin is unavailable:** confirm you registered the same Tunnel ID in [ChatGPT Plugins](https://chatgpt.com/plugins), completed account permissions, and selected the plugin in the conversation. A green local status alone is insufficient.
+- **Saved new settings, but the old connection remains:** Stop Service, then Start Service. Saving intentionally does not interrupt a running process.
+- **Tunnel not connected:** check the Tunnel ID/key, internet access, and **Refresh Status**. Inspect the private `runtime/tunnel.log` locally if needed; never share its raw contents.
+- **The service does not start after sign-in:** on Windows, verify **Auto-start at Windows sign-in** is enabled. On Linux/macOS, inspect the current user's service manager.
+- **Another computer/WSL is being controlled:** verify which installed service and operating-system user the ChatGPT Tunnel reaches. Windows native installation does not require WSL.
 
-```powershell
-Set-Location 'C:\path\to\remote-desktop-mcp'
-npm.cmd ci --no-audit --no-fund
-npm.cmd run smoke
-```
+If a reproducible issue remains, [open an Issue](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) with sanitized details, never credentials or private command output.
 
-**Linux / macOS** (replace the directory):
+## 4. Other MCP Clients
 
-```bash
-cd '/path/to/remote-desktop-mcp'
-npm ci --no-audit --no-fund
-npm run smoke
-```
-
-`npm ci` automatically applies the repository's tested compatibility patch to the installed Desktop Commander dependency. The smoke command should exit successfully and print a JSON result containing `"initialized":true` and `"readonly_tool_succeeded":true`. It makes a real read-only `list_sessions` call without printing session data.
-
-### 2.3. Connect your local MCP client
-
-In the **local MCP client's** server settings, add this stdio server. Replace the sample path with the **absolute path to `scripts/proxy.mjs` in the folder from Step 2.2**:
+The installer is not required when developing from source. A **local stdio MCP client** can launch the project directly without a Tunnel ID or runtime API key. Install development dependencies as in [Section 5](#5-development), then configure your client's MCP server with the absolute path to `scripts/proxy.mjs`:
 
 ```json
 {
@@ -79,102 +111,11 @@ In the **local MCP client's** server settings, add this stdio server. Replace th
 }
 ```
 
-On Windows, an argument such as `C:/tools/remote-desktop-mcp/scripts/proxy.mjs` is valid. The JSON is a common MCP-client configuration format; the exact settings location depends on your client. If your client cannot find `node`, replace the `command` value with its absolute executable path.
-
-Save the configuration, then **restart or reconnect the MCP client**. It will start the stdio process itself. Do not start a second copy of `npm run mcp` for that client.
-
-### 2.4. Complete one operation
-
-1. In the connected MCP client, list the available tools and find `list_sessions`.
-2. Ask the client to call `list_sessions` with no arguments.
-3. Confirm the call succeeds. An empty session list is a valid result on a fresh machine.
-
-This confirms the client can reach the adapter and Desktop Commander. The earlier `npm run smoke` verifies the same chain independently of your client's configuration; **neither test proves a remote ChatGPT Tunnel is connected**.
-
-### 2.5. Troubleshooting
-
-- **`npm ci` fails:** check the Node version, npm access, and that the terminal is in the extracted folder with `package-lock.json`. Do not use `npm install` as a substitute for the locked install.
-- **The MCP client cannot find Node or the server:** use absolute paths for both `command` and `args`; graphical clients may not inherit your terminal's PATH. Confirm that `npm run smoke` succeeds in the same directory.
-- **Tools are missing or the client reports a stdio error:** reconnect the client and check its MCP logs. The adapter uses stdout for JSON-RPC, so do not direct unrelated diagnostic output there.
-- **Files appear to come from another computer or WSL:** check which Node executable and `proxy.mjs` path the client launches. The adapter runs with the permissions and filesystem of that process.
-- **After moving the installation:** update the absolute path in the MCP client. If you also configured a Tunnel, rerun the [remote setup](#41-case-1-connect-chatgpt-through-a-tunnel) from the new location.
-
-For reproducible problems, [open an Issue](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) with sanitized error text. Do not post credentials, file contents, or terminal history.
-
-## 3. Configuration
-
-Local stdio use does **not** require a `config.toml` file. The defaults in [config.example.toml](config.example.toml) are sufficient.
-
-To change a setting, create a private `config.toml` beside `package.json`. For example:
-
-```toml
-[mcp]
-filter_log_notifications = true
-```
-
-This option suppresses upstream *info/debug* MCP log notifications; it does **not** filter warning/error notifications or redact tool results. The adapter is not a data-loss-prevention or sandbox layer.
-
-Remote setup writes its own private `config.toml` and `runtime/` files. `[tunnel].id` is the Tunnel ID created for **your** account, and `api_key_env` names the environment variable used by the tunnel process. The setup wizard stores the runtime credential privately, rather than putting its value in the generated Tunnel YAML. These local files are excluded from Git; do not copy them into issues or pull requests.
-
-## 4. Optional Features
-
-### 4.1. Case 1: Connect ChatGPT through a Tunnel
-
-Use this case only if your ChatGPT account or workspace permits **custom MCP connections using a Secure MCP Tunnel**. Check the current [official connection instructions](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) first. A tunnel is needed because ChatGPT cannot directly launch your local stdio server.
-
-1. **Create the remote credentials.** Obtain your own Tunnel ID from the [OpenAI tunnel settings](https://platform.openai.com/settings/organization/tunnels) and a runtime API key from [API keys](https://platform.openai.com/settings/organization/api-keys). These are account-specific; the installation does not create them for you. **Do not paste either value into chat or commit it to Git.**
-2. **Run the setup wizard from your installed project directory.** It installs the required supported tools (including the official tunnel client when missing), checks local MCP, prompts for your Tunnel ID and hidden runtime key, and configures a user-owned background runtime.
-
-**Windows PowerShell:**
-
-```powershell
-Set-Location 'C:\path\to\remote-desktop-mcp'
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
-```
-
-**Linux / macOS:**
-
-```bash
-cd '/path/to/remote-desktop-mcp'
-bash setup.sh
-```
-
-3. **Verify the local tunnel process.** The wizard reports `local_mcp: passed` and `tunnel_ready: true` when its checks succeed. In a terminal in the same directory, run:
-
-```powershell
-# Windows
-npm.cmd run status
-```
-
-```bash
-# Linux / macOS
-npm run status
-```
-
-Confirm `"managed_process_running":true` and `"tunnel_ready":true`. These checks **do not** prove ChatGPT has registered the connection.
-
-4. **Register the MCP connection in ChatGPT.** Where supported, open **Plugins → Add custom MCP server**, choose **Tunnel**, select or enter **your Tunnel ID**, complete the permission/security checks, and create/install the connection. Exact controls depend on the account/workspace; use the [official guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) if the UI differs.
-5. **Accept the connection by calling a tool.** Start a new chat, select the connected plugin, and make a **read-only** `list_sessions` call. Confirm the tool returns successfully. The setup wizard cannot complete your ChatGPT authorization or this last check.
-
-**Persistent runtime:** Windows uses a per-user Scheduled Task, macOS a user LaunchAgent, and Linux a user systemd service where available (otherwise a background process). They run on the authorized machine and are not available when it is powered off. The Linux fallback background process does not automatically resume after logout or reboot. Do not run two runtimes for the same Tunnel.
-
-### 4.2. Case 2: Manage a configured Tunnel
-
-In the installation directory, use `npm.cmd` on Windows or `npm` on Linux/macOS:
-
-```bash
-npm run status
-npm run stop
-npm start
-```
-
-`status` reports process and Tunnel readiness; `stop` ends the managed runtime; `start` starts it again with saved credentials. Use only the operation you need, not all three as an installation requirement. Rerunning `setup.ps1`/`setup.sh` can update the configuration while preserving prior choices. Move the installation only after stopping it, then rerun setup to update absolute paths.
-
-For a customized Linux service installation, [deploy/systemd.service.example](deploy/systemd.service.example) is a template; replace the paths to your local checkout. The setup wizard is the supported default.
+Client configuration locations vary. Reconnect the client and make a read-only `list_sessions` call. This local stdio check **does not** establish a ChatGPT Tunnel connection.
 
 ## 5. Development
 
-For development from source, install Git, Node.js meeting [package.json](package.json)'s engine requirement, and npm. The release archives contain the same JavaScript project; source contributors can instead clone it:
+Development from source requires Git and a Node.js version meeting [package.json](package.json); these requirements **do not apply to the bundled installers**.
 
 ```bash
 git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
@@ -185,16 +126,12 @@ npm run smoke
 npm run audit:high
 ```
 
-In native Windows PowerShell, use `npm.cmd` in place of `npm` if script execution policy prevents invoking the npm PowerShell shim. `check` verifies the compatibility patch and unit tests; `smoke` initializes the real local MCP server, discovers tools, and makes one read-only call. CI covers Node 22/24 on Windows, Linux, and macOS and checks native setup with **synthetic credentials**. Passing CI does not establish actual Tunnel access or a real login/reboot lifecycle.
+On Windows PowerShell use `npm.cmd` instead of `npm` if required by execution policy. `check` runs compatibility and unit tests; `smoke` initializes MCP, enumerates tools, and calls a read-only tool. Propose changes via a pull request and Squash Merge. Platform installers are built by [.github/workflows/offline-installers.yml](.github/workflows/offline-installers.yml), and tagged releases by [.github/workflows/release.yml](.github/workflows/release.yml).
 
-The repository keeps Desktop Commander as a separately installed dependency and applies a reviewed compatibility patch after installation. Changes should be proposed in a feature branch, reviewed in a PR, and merged with Squash Merge.
+## 6. License and Security
 
-## 6. License
+Original project code is [Apache-2.0](LICENSE). Third-party dependencies and licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Original adapter and setup code is [Apache-2.0](LICENSE). Desktop Commander is MIT; the separately installed OpenAI tunnel client is Apache-2.0. See [third-party notices](THIRD_PARTY_NOTICES.md) for attribution, upstream modifications, and redistribution requirements. User files and third-party works are not covered by this source-code license.
+This service can read/write files and execute commands **with the permissions of the operating-system user running it**. It is not an authorization sandbox or a tool-level allowlist. Use least-privilege accounts and review the plugin's permissions. MCP requests and results may be sent to the connected AI service. Keep `config.toml`, `runtime/`, API keys, logs, and personal data private; never commit them or post them in a public issue.
 
-**Security:** this adapter exposes Desktop Commander's upstream file and shell tools under **the operating-system account that runs it**. It provides no built-in tool allowlist, authorization boundary, command sandbox, or screen-control isolation. Use a dedicated, least-privilege account or an isolated machine/container. MCP requests and results may be transmitted to the connected AI service; Desktop Commander's telemetry and history settings are controlled upstream.
-
-Keep private `config.toml`, `runtime/`, credentials, logs, and user files out of Git. Never expose the local tunnel health/admin listener to the public Internet; use the official Tunnel and account-level controls. On Unix, private files/directories receive restrictive modes; Windows installation restricts them to the current user. Review staged changes before publishing because .gitignore cannot remove secrets already committed.
-
-Report security issues privately through [GitHub security advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories) when available, or **contact@thinkerqaq.com**. Do not include live credentials or private command output in public issues.
+Report vulnerabilities privately through [GitHub security advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories).
