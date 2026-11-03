@@ -4,10 +4,9 @@
 
 - [1. Introduction](#1-introduction)
 - [2. Quick Start](#2-quick-start)
-- [3. CLI](#3-cli)
-- [4. Optional Features](#4-optional-features)
-- [5. Development](#5-development)
-- [6. License](#6-license)
+- [3. Optional Features](#3-optional-features)
+- [4. Development](#4-development)
+- [5. License](#5-license)
 
 ## 1. Introduction
 
@@ -23,17 +22,27 @@ The project also provides installers, configuration, and service management for 
 
 ## 2. Quick Start
 
-Install RemoteDesktopMCP, connect it to ChatGPT, and verify one read-only tool call. The same client runs on Windows, Linux, and macOS, with a graphical interface or a terminal.
+Install RemoteDesktopMCP, configure the connection, and verify it in ChatGPT. You need an internet connection and a ChatGPT account or workspace that supports custom MCP Tunnel connections. Installers are available for Windows x64, Linux x64, and Intel macOS.
 
-### 2.1. Requirements
-
-You need an internet connection and a ChatGPT account or workspace that supports custom MCP Tunnel connections. Offline installers currently target Windows x64, Linux x64, and Intel macOS.
-
-### 2.2. Install
+### 2.1. Install
 
 Download the installer for your system from the [latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest).
 
-#### 2.2.1. Command Line
+#### 2.1.1. Graphical Interface
+
+##### Windows
+
+Run `RemoteDesktopMCP-v*-windows-amd64.exe` and complete the installation wizard. Open **Configure Tunnel** from the Start Menu.
+
+##### macOS
+
+Open `RemoteDesktopMCP-v*-darwin-amd64.dmg` and run the installer application. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
+
+##### Linux
+
+Run `RemoteDesktopMCP-v*-linux-amd64.run` from your desktop environment. If execution is blocked, enable it in the file properties. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
+
+#### 2.1.2. Command Line
 
 ##### Windows
 
@@ -70,28 +79,58 @@ chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
 ```
 
+After installation, configure the connection in the next section.
 
-After installation, use the [CLI](#3-cli) to configure and manage the connection.
+### 2.2. Configuration
 
-#### 2.2.2. Graphical Interface
+Create a [Tunnel ID](https://platform.openai.com/settings/organization/tunnels) and a [Runtime API Key](https://platform.openai.com/settings/organization/api-keys).
 
-##### Windows
+#### 2.2.1. Graphical Interface
 
-Run `RemoteDesktopMCP-v*-windows-amd64.exe` and complete the installation wizard. Open **Configure Tunnel** from the Start Menu.
+Enter both values in the configuration UI, save the configuration, start the service, and refresh status to confirm **Local Tunnel: Connected**.
 
-##### macOS
+#### 2.2.2. Command Line
 
-Open `RemoteDesktopMCP-v*-darwin-amd64.dmg` and run the installer application. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
+From the installation directory:
 
-##### Linux
+```bash
+./bin/remotedesktopmcp configure
+./bin/remotedesktopmcp start
+./bin/remotedesktopmcp status
+```
 
-Run `RemoteDesktopMCP-v*-linux-amd64.run` from your desktop environment. If execution is blocked, enable it in the file properties. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
+On Windows, use `.\bin\remotedesktopmcp.exe` with the same subcommands. Interactive `configure` hides the Runtime API Key. For automation, use `configure --id <tunnel-id> --api-key-stdin` and pass the key through standard input. Use `stop` to stop the service.
 
-### 2.3. Connect ChatGPT
+#### 2.2.3. Start on Boot (Optional)
 
-Create a [Tunnel ID](https://platform.openai.com/settings/organization/tunnels) and a [Runtime API Key](https://platform.openai.com/settings/organization/api-keys). Enter both in the client, save the configuration, and start the service. Confirm that the local Tunnel reports **Connected**.
+A normal `start` launches a user-owned background process. To run after a reboot, first configure the connection, then register an OS-managed service.
 
-Then open [ChatGPT Plugins](https://chatgpt.com/plugins), register a custom MCP Tunnel using the same Tunnel ID, and authorize the connection. Refer to the [OpenAI connection guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) for current account-specific steps.
+Linux / macOS user sessions:
+
+```bash
+./bin/remotedesktopmcp service --scope user install
+./bin/remotedesktopmcp start
+```
+
+On SSH-only macOS or Linux servers, use a system service with an unprivileged account that can access the private configuration:
+
+```bash
+sudo ./bin/remotedesktopmcp service --scope system --user YOUR_OS_USER install
+sudo ./bin/remotedesktopmcp start
+```
+
+On Windows Server Core, first configure the Tunnel under the service account. Register Windows Service from an elevated terminal (the account password is entered privately):
+
+```powershell
+.\bin\remotedesktopmcp.exe service --scope system --user "DOMAIN\restricted-user" install
+.\bin\remotedesktopmcp.exe start
+```
+
+System service registration needs OS privileges. Remove old auto-start tasks before migrating to avoid duplicate instances. Unattended reboot recovery still requires separate acceptance testing.
+
+### 2.3. Verify in ChatGPT
+
+Open [ChatGPT Plugins](https://chatgpt.com/plugins), register a custom MCP Tunnel using the same Tunnel ID, and authorize the connection. Refer to the [OpenAI connection guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) for current account-specific steps.
 
 In ChatGPT, select the plugin and call the read-only `list_sessions` tool. An empty list is a valid result.
 
@@ -99,57 +138,11 @@ In ChatGPT, select the plugin and call the read-only `list_sessions` tool. An em
 
 If the Tunnel is not connected, verify the saved ID, key, network, and local service status. If ChatGPT cannot call the tools despite a connected Tunnel, verify that its plugin is registered and selected. Do not share credentials or local logs containing private data.
 
-## 3. CLI
+## 3. Optional Features
 
-The command-line client works without a desktop, browser, PowerShell configuration wizard, or Bash configuration wizard. GUI and CLI save the same configuration and control the same runtime.
+### 3.1. Connect a local MCP client
 
-### 3.1. Configure and operate
-
-From the installation directory, use the bundled client:
-
-```bash
-./bin/remotedesktopmcp configure
-./bin/remotedesktopmcp start
-./bin/remotedesktopmcp status
-./bin/remotedesktopmcp stop
-```
-
-On Windows, the executable is `bin\\remotedesktopmcp.exe`; the subcommands are the same. Interactive `configure` hides the Runtime API Key while typing. For automation, use `configure --id <tunnel-id> --api-key-stdin` and supply the key through standard input rather than as a command argument.
-
-Service startup depends on the platform and available login/session manager. A fallback background process does not automatically survive a reboot. Native system services without an interactive login still require separate acceptance testing.
-
-### 3.2. Native services without a desktop
-
-Manual `start` uses a user-owned background process. For restart-on-boot, register an OS-managed service after configuring the Tunnel. The service runs the same Go client and Node MCP worker.
-
-Linux or macOS user session:
-
-```bash
-./bin/remotedesktopmcp service --scope user install
-./bin/remotedesktopmcp start
-```
-
-An SSH-only macOS host should use a **system** launchd service under an unprivileged account rather than depending on a GUI Login Session. On Linux servers, systemd can also use a system service:
-
-```bash
-sudo ./bin/remotedesktopmcp service --scope system --user YOUR_OS_USER install
-./bin/remotedesktopmcp start
-```
-
-On Windows Server Core, first configure the Tunnel under the same restricted OS account that will run the service. In an elevated terminal, register the Windows Service using that account (password entered privately through the terminal):
-
-```powershell
-.\bin\remotedesktopmcp.exe service --scope system --user "DOMAIN\restricted-user" install
-.\bin\remotedesktopmcp.exe start
-```
-
-Use `stop` and `service uninstall` for explicit shutdown and removal. System service installation requires the appropriate OS permissions; the specified service account must have access to the installation directory and private runtime data. The project refuses implicit LocalSystem registration. Old scheduled tasks and launch agents must be removed before migrating an existing installation.
-
-## 4. Optional Features
-
-### 4.1. Connect a local MCP client
-
-RemoteDesktopMCP also supports local stdio clients without a Tunnel. For source-based use, install the development dependencies in [Development](#5-development), then configure the local client with the absolute path to `scripts/proxy.mjs`:
+RemoteDesktopMCP also supports local stdio clients without a Tunnel. For source-based use, install the development dependencies in [Development](#4-development), then configure the local client with the absolute path to `scripts/proxy.mjs`:
 
 ```json
 {
@@ -164,7 +157,7 @@ RemoteDesktopMCP also supports local stdio clients without a Tunnel. For source-
 
 Reconnect the client and call `list_sessions` to verify.
 
-## 5. Development
+## 4. Development
 
 You can skip this section if you're using an installer. To work with the source, install Git, npm, and a Node.js version supported by [package.json](package.json):
 
@@ -181,7 +174,7 @@ npm run audit:high
 
 Changes go through pull-request review and Squash Merge. See [Installer CI](.github/workflows/offline-installers.yml) and [Release CI](.github/workflows/release.yml) for the package builds.
 
-## 6. License
+## 5. License
 
 Original project code is licensed under [Apache-2.0](LICENSE). Third-party licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
