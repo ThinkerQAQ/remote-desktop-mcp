@@ -4,7 +4,7 @@
 
 - [1. Introduction](#1-introduction)
 - [2. Quick Start](#2-quick-start)
-- [3. Configuration](#3-configuration)
+- [3. CLI](#3-cli)
 - [4. Optional Features](#4-optional-features)
 - [5. Development](#5-development)
 - [6. License](#6-license)
@@ -31,15 +31,61 @@ You need an internet connection and a ChatGPT account or workspace that supports
 
 ### 2.2. Install
 
-Download the package for your system from the [latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest).
+Download the installer for your system from the [latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest).
 
-| Platform | Package |
-| --- | --- |
-| Windows x64 | `RemoteDesktopMCP-v*-windows-amd64.exe` |
-| Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
-| macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
+#### 2.2.1. Command Line
 
-Run the installer. On Windows, use the **Configure Tunnel** Start Menu shortcut. On macOS and Linux, the installed Go client can be opened with `./bin/remotedesktopmcp gui` from its installation directory. For machines without a desktop, follow [CLI](#3-cli) instead.
+##### Windows
+
+Open a terminal in the download directory:
+
+
+```powershell
+$installer = (Get-ChildItem .\RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
+Start-Process -FilePath $installer -ArgumentList '--accept-licenses --default-answer --confirm-command install' -Wait
+```
+
+
+##### macOS
+
+Mount the DMG and run its installer:
+
+
+```bash
+dmg=$(find . -maxdepth 1 -name 'RemoteDesktopMCP-v*-darwin-amd64.dmg' -print -quit)
+mount=$(mktemp -d)
+hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+app=$(find "$mount" -maxdepth 1 -name '*.app' -print -quit)
+installer=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)
+QT_QPA_PLATFORM=offscreen "$installer" --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
+hdiutil detach "$mount"
+```
+
+
+##### Linux
+
+
+```bash
+chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
+QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
+```
+
+
+After installation, use the [CLI](#3-cli) to configure and manage the connection.
+
+#### 2.2.2. Graphical Interface
+
+##### Windows
+
+Run `RemoteDesktopMCP-v*-windows-amd64.exe` and complete the installation wizard. Open **Configure Tunnel** from the Start Menu.
+
+##### macOS
+
+Open `RemoteDesktopMCP-v*-darwin-amd64.dmg` and run the installer application. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
+
+##### Linux
+
+Run `RemoteDesktopMCP-v*-linux-amd64.run` from your desktop environment. If execution is blocked, enable it in the file properties. On the completion screen, select **Open RemoteDesktopMCP configuration** to open the configuration UI in your browser.
 
 ### 2.3. Connect ChatGPT
 
@@ -57,18 +103,7 @@ If the Tunnel is not connected, verify the saved ID, key, network, and local ser
 
 The command-line client works without a desktop, browser, PowerShell configuration wizard, or Bash configuration wizard. GUI and CLI save the same configuration and control the same runtime.
 
-### 3.1. Install without a desktop
-
-Qt Installer Framework supports headless installation with `--accept-licenses --default-answer --confirm-command install`. For Linux servers, run:
-
-```bash
-chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
-QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
-```
-
-On Windows Server Core, invoke the downloaded `.exe` installer with the same options and `--root` directory. On macOS over SSH, mount the `.dmg` with `hdiutil`, then run the enclosed installer executable with those options. Both must be verified on actual headless hosts before being treated as fully supported release targets.
-
-### 3.2. Configure and operate
+### 3.1. Configure and operate
 
 From the installation directory, use the bundled client:
 
@@ -83,7 +118,7 @@ On Windows, the executable is `bin\\remotedesktopmcp.exe`; the subcommands are t
 
 Service startup depends on the platform and available login/session manager. A fallback background process does not automatically survive a reboot. Native system services without an interactive login still require separate acceptance testing.
 
-### 3.3. Native services without a desktop
+### 3.2. Native services without a desktop
 
 Manual `start` uses a user-owned background process. For restart-on-boot, register an OS-managed service after configuring the Tunnel. The service runs the same Go client and Node MCP worker.
 
