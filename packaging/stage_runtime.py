@@ -120,7 +120,8 @@ def build_client(stage: Path, platform: str, arch: str) -> None:
     # Compiled Go dependencies must carry their redistribution licenses.
     for module, filename in (("golang.org/x/term", "Go-term-LICENSE.txt"),
                              ("golang.org/x/sys", "Go-sys-LICENSE.txt"),
-                             ("github.com/kardianos/service", "Go-service-LICENSE.txt")):
+                             ("github.com/kardianos/service", "Go-service-LICENSE.txt"),
+                             ("github.com/pelletier/go-toml/v2", "Go-toml-LICENSE.txt")):
         metadata = json.loads(subprocess.check_output(
             ["go", "list", "-m", "-json", module], cwd=ROOT / "client", env=env, text=True))
         license_file = Path(metadata["Dir"]) / "LICENSE"

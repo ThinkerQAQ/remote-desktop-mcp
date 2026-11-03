@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -32,13 +33,17 @@ var assets embed.FS
 var tunnelIDPattern = regexp.MustCompile(`^tunnel_[A-Za-z0-9_-]+$`)
 
 type state struct {
-	ID        string `json:"id"`
-	HasKey    bool   `json:"has_key"`
-	Managed   bool   `json:"managed_process_running"`
-	Ready     bool   `json:"tunnel_ready"`
-	Manager   string `json:"manager"`
-	Autostart *bool  `json:"autostart_enabled"`
-	Error     string `json:"error,omitempty"`
+	Revision        string `json:"revision"`
+	RestartRequired bool   `json:"restart_required"`
+	ID              string `json:"id"`
+	HasKey          bool   `json:"has_key"`
+	Managed         bool   `json:"managed_process_running"`
+	Ready           bool   `json:"tunnel_ready"`
+	Manager         string `json:"manager"`
+	Autostart       *bool  `json:"autostart_enabled"`
+	AutoConnect     bool   `json:"tunnel_auto_connect"`
+	Connecting      bool   `json:"tunnel_connecting"`
+	Error           string `json:"error,omitempty"`
 }
 type setupState struct {
 	ID      string `json:"id"`
@@ -121,8 +126,29 @@ func readState(root string) state {
 	return nativeState(root)
 }
 func service(root, action string) error {
-	if action != "start" && action != "stop" {
+	if action != "start" && action != "stop" && action != "restart" {
 		return errors.New("invalid service action")
+	}
+	if action != "stop" {
+		if err := validateSavedConnection(root); err != nil {
+			return err
+		}
+	}
+	if action == "restart" {
+		if !nativeState(root).Managed {
+			return errors.New("start the service before restarting it")
+		}
+		if err := controlNative(root, "stop"); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for localControl(root, "status") {
+			if time.Now().After(deadline) {
+				return errors.New("service has not stopped; restart cancelled")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return controlNative(root, "start")
 	}
 	return controlNative(root, action)
 }
@@ -165,7 +191,7 @@ func webGUI(root string) error {
 		b, _ := assets.ReadFile("ui/index.html")
 		_, _ = w.Write(b)
 	})
-	for _, file := range []string{"app.js", "style.css"} {
+	for _, file := range []string{"app.js", "state.js", "style.css"} {
 		name := file
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) {
 			if !authorized(w, r) {
@@ -189,6 +215,7 @@ func webGUI(root string) error {
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(readState(root))
 	})
+	var actionLock sync.Mutex
 	mux.HandleFunc("POST /api/action", func(w http.ResponseWriter, r *http.Request) {
 		if !authorized(w, r) {
 			return
@@ -200,19 +227,30 @@ func webGUI(root string) error {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		defer r.Body.Close()
 		var request struct {
-			Action string `json:"action"`
-			ID     string `json:"id"`
-			Key    string `json:"key"`
+			Action      string `json:"action"`
+			Autostart   *bool  `json:"autostart_enabled"`
+			AutoConnect *bool  `json:"tunnel_auto_connect"`
+			ID          string `json:"id"`
+			Key         string `json:"key"`
 		}
 		if json.NewDecoder(r.Body).Decode(&request) != nil {
 			http.Error(w, "Invalid request", 400)
 			return
 		}
+		if !actionLock.TryLock() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "Another operation is in progress"})
+			return
+		}
+		defer actionLock.Unlock()
 		var e error
 		switch request.Action {
 		case "save":
-			e = save(root, strings.TrimSpace(request.ID), request.Key)
-		case "start", "stop":
+			e = savePreferences(root, strings.TrimSpace(request.ID), request.Key, request.Autostart, request.AutoConnect)
+		case "connect", "disconnect":
+			e = connectionAction(root, request.Action)
+		case "start", "stop", "restart":
 			e = service(root, request.Action)
 		default:
 			e = errors.New("unknown action")
@@ -349,7 +387,12 @@ func main() {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(b)
-	case "start", "stop":
+	case "connect", "disconnect":
+		if e = connectionAction(root, action); e != nil {
+			log.Fatal(e)
+		}
+		fmt.Println(action + " succeeded")
+	case "start", "stop", "restart":
 		if e = service(root, action); e != nil {
 			log.Fatal(e)
 		}
@@ -358,6 +401,8 @@ func main() {
 		f := flag.NewFlagSet("configure", flag.ExitOnError)
 		id := f.String("id", "", "Tunnel ID")
 		fromStdin := f.Bool("api-key-stdin", false, "Read runtime API key from standard input")
+		startup := f.Bool("autostart", false, "Start local service at system login")
+		connect := f.Bool("auto-connect", true, "Connect Tunnel when local service starts")
 		_ = f.Parse(args)
 		isTTY := term.IsTerminal(int(os.Stdin.Fd()))
 		if !*fromStdin && !isTTY && (*id == "" || !readState(root).HasKey) {
@@ -393,12 +438,21 @@ func main() {
 		if len(key) > 4096 {
 			log.Fatal("API key too long")
 		}
-		if e = save(root, *id, key); e != nil {
+		var startupOption, connectOption *bool
+		f.Visit(func(option *flag.Flag) {
+			if option.Name == "autostart" {
+				startupOption = startup
+			}
+			if option.Name == "auto-connect" {
+				connectOption = connect
+			}
+		})
+		if e = savePreferences(root, *id, key, startupOption, connectOption); e != nil {
 			log.Fatal(e)
 		}
 		fmt.Println("Configuration saved; service state unchanged")
 	default:
-		fmt.Fprintln(os.Stderr, "Usage: remotedesktopmcp [gui|configure|start|stop|status|service]")
+		fmt.Fprintln(os.Stderr, "Usage: remotedesktopmcp [gui|configure|start|stop|restart|connect|disconnect|status|service]")
 		os.Exit(2)
 	}
 }

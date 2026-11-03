@@ -13,6 +13,7 @@ This repository contains original integration code. It does not vendor Desktop C
 | golang.org/x/term v0.32.0 | BSD-3-Clause | Cross-platform hidden terminal input in the Go client |
 | golang.org/x/sys v0.33.0 | BSD-3-Clause | Platform system calls for Go terminal support |
 | github.com/kardianos/service v1.2.3 | zlib | Native Windows Service, macOS launchd, and Linux systemd integration |
+| github.com/pelletier/go-toml/v2 v2.2.3 | MIT | Preserve existing settings while saving Go client connection preferences |
 | openai/tunnel-client (separate install; tested 0.0.16) | Apache-2.0 | Persistent remote transport |
 
 Desktop Commander attribution: Copyright (c) 2024–2025 Eduard Ruzga and Desktop Commander Contributors. Project names and marks belong to their respective owners. See installed dependency LICENSE files for full terms and transitive dependency licenses.

@@ -122,6 +122,11 @@ jobs:
             $process = Start-Process -FilePath (Resolve-Path $entry).Path -ArgumentList "--self-test" -Wait -PassThru
             if ($process.ExitCode -ne 0) { throw "Native GUI selftest failed ($($process.ExitCode)): $entry" }
           }
+      - name: Verify Windows login startup and independent Tunnel controls
+        if: runner.os == 'Windows'
+        run: |
+          node scripts/verify-startup.mjs
+          node scripts/verify-startup.mjs --legacy
       - name: Build native offline Qt installer
         shell: bash
         run: |

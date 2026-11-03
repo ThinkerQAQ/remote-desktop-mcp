@@ -39,9 +39,9 @@ export function taskScript(action) {
   const launcher = path.join(root, 'scripts/windows-hidden-launch.vbs');
   const task = psQuote(label);
   const ownership = `$t=Get-ScheduledTask -TaskName ${task} -ErrorAction SilentlyContinue; if ($t) { $a=$t.Actions[0]; if ($t.Actions.Count -ne 1 -or $a.Execute -notmatch '(?i)(^|[\\\\/])wscript\\.exe$' -or $a.Arguments -ne ${psQuote('"' + launcher + '"')}) { throw 'Task name collision' } }`;
-  if (action === 'auto-status') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { 'missing' } elseif ($t.State -eq 'Disabled') { 'disabled' } else { 'enabled' }`;
+  if (action === 'auto-status') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { 'missing' } elseif (-not $t.Settings.Enabled) { 'disabled' } else { 'enabled' }`;
   if (action === 'auto-enable') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { throw 'Task missing' }; Enable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null`;
-  if (action === 'start-task') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t -or $t.State -eq 'Disabled') { throw 'Logon task not enabled' }; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop`;
+  if (action === 'start-task') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t -or -not $t.Settings.Enabled) { throw 'Logon task not enabled' }; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop`;
   if (action === 'auto-disable') return `$ErrorActionPreference='Stop'; ${ownership}; if ($t) { Disable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null }`;
   if (!['start','register'].includes(action)) throw new Error('Unknown task action');
   const registration = `$ErrorActionPreference='Stop'; ${ownership}; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(host)} -Argument ${psQuote('"' + launcher + '"')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${task} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null`;
@@ -153,33 +153,66 @@ export async function start(manager) {
 async function run() {
   const s = state(), secret = readPrivateJSON(path.join(dir, 'credentials.json'));
   const token = crypto.randomBytes(32).toString('hex');
-  let child, stopping = false;
-  const terminate = () => {
-    stopping = true;
-    if (!child?.pid) return;
-    if (process.platform === 'win32') call('taskkill.exe', ['/PID', String(child.pid), '/T', '/F']); else child.kill('SIGTERM');
+  let child, stopping = false, connecting = s.tunnel_auto_connect !== false, retry, changing = false;
+  const status = () => ({label, revision: s.revision || '', connecting});
+  const start = () => {
+    if (stopping || !connecting || child) return;
+    const fd = fs.openSync(path.join(dir, 'tunnel.log'), fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY, 0o600);
+    try {
+      child = spawn(s.tunnel, [...(s.tunnelArgs || []), 'run', '--config', path.join(dir, 'tunnel.yaml')], {
+        env: {...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey},
+        stdio: ['ignore', fd, fd], windowsHide: true
+      });
+    } finally { fs.closeSync(fd); }
+    const active = child;
+    const exited = () => {
+      if (child !== active) return;
+      child = undefined;
+      if (stopping) finish();
+      else if (connecting) retry = setTimeout(start, 5000);
+    };
+    active.once('error', exited); active.once('exit', exited);
   };
-  const server = http.createServer((req, res) => {
-    if (req.headers.authorization !== `Bearer ${token}` || !((req.url === '/status' && req.method === 'GET') || (req.url === '/stop' && req.method === 'POST'))) { res.writeHead(403); res.end(); return; }
-    res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ label }));
-    if (req.url === '/stop') terminate();
+  const kill = () => {
+    clearTimeout(retry);
+    if (!child?.pid) { if (stopping) finish(); return; }
+    if (process.platform === 'win32') spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {windowsHide:true, stdio:'ignore'});
+    else child.kill('SIGTERM');
+  };
+  const terminate = () => { stopping = true; connecting = false; kill(); };
+  const server = http.createServer(async (req, res) => {
+    const action = req.url?.slice(1);
+    const valid = req.method === 'GET' && action === 'status' || req.method === 'POST' && ['stop','connect','disconnect'].includes(action);
+    if (req.headers.authorization !== `Bearer ${token}` || !valid) { res.writeHead(403); res.end(); return; }
+    res.setHeader('Content-Type', 'application/json');
+    if (action === 'status') { res.end(JSON.stringify(status())); return; }
+    if (changing || stopping) { res.writeHead(409); res.end('{}'); return; }
+    changing = true;
+    try {
+      if (action === 'connect') { connecting = true; start(); }
+      if (action === 'disconnect') {
+        connecting = false;
+        const active = child;
+        kill();
+        if (active && child === active) {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => { cleanup(); reject(Error('Tunnel did not stop')); }, 4000);
+            const done = () => { cleanup(); resolve(); };
+            const cleanup = () => { clearTimeout(timer); active.off('exit', done); active.off('error', done); };
+            active.once('exit', done); active.once('error', done);
+          });
+        }
+      }
+      res.end(JSON.stringify(status()));
+      if (action === 'stop') terminate();
+    } catch { res.writeHead(500); res.end('{}'); }
+    finally { changing = false; }
   });
+  const finish = () => { server.close(); server.closeAllConnections(); process.exitCode = 0; };
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  privateWrite(path.join(dir, 'control.json'), JSON.stringify({ port: server.address().port, token }));
-  const args = ['run', '--config', path.join(dir, 'tunnel.yaml')];
-  // Scheduled tasks have no interactive output. Log privately instead of
-  // opening a console window or forwarding logs to the ChatGPT conversation.
-  const logFile = path.join(dir, 'tunnel.log');
-  const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY, 0o600);
-  try {
-    child = spawn(s.tunnel, [...(s.tunnelArgs || []), ...args], {
-      env: { ...process.env, DV_CONFIG: path.join(root, 'config.toml'), OPENAI_API_KEY: secret.apiKey },
-      stdio: ['ignore', fd, fd], windowsHide: true
-    });
-  } finally { fs.closeSync(fd); }
+  privateWrite(path.join(dir, 'control.json'), JSON.stringify({port: server.address().port, token}));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, terminate);
-  const finish = code => { server.close(); server.closeAllConnections(); process.exitCode = stopping ? 0 : (code ?? 1); };
-  child.once('error', () => finish(1)); child.once('exit', finish);
+  start();
 }
 if (isDirectExecution(import.meta.url)) {
   try {
