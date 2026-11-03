@@ -26,7 +26,7 @@ class InstallerTests(unittest.TestCase):
         (stage / "brand").mkdir()
         (stage / "brand/remotedesktopmcp.ico").write_text("stub")
         (stage / "brand/remotedesktopmcp.png").write_text("stub")
-        (stage / ("Configure-RemoteDesktop.ps1" if platform == "windows" else "Configure-RemoteDesktop.sh")).write_text("configure")
+        (stage / "bin" / ("remotedesktopmcp.exe" if platform == "windows" else "remotedesktopmcp")).write_text("client")
         return stage
 
     def test_qt_tree_all_platforms(self):
@@ -110,7 +110,7 @@ class InstallerTests(unittest.TestCase):
                     text = (dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").read_text()
                     self.assertIn("Installation complete.", text)
                     self.assertNotIn("platform.openai.com", text)
-        ui = (Path(__file__).resolve().parents[1] / "assets/RemoteDesktopMCP-Configure.cs").read_text()
+        ui = (Path(__file__).resolve().parents[2] / "client/ui/index.html").read_text()
         self.assertIn("https://platform.openai.com/settings/organization/tunnels", ui)
         self.assertIn("https://platform.openai.com/settings/organization/api-keys", ui)
         self.assertIn("https://chatgpt.com/plugins", ui)
@@ -132,34 +132,17 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("DialogResult.Yes", gui)
         self.assertNotIn("DV_RUNTIME_API_KEY", gui)
 
-    def test_native_windows_config_has_connection_status_and_masked_key(self):
-        gui = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Configure.cs").read_text()
-        self.assertIn('SetCurrentProcessExplicitAppUserModelID', gui)
-        self.assertIn('Open ChatGPT Plugins', gui)
-        self.assertIn('https://chatgpt.com/plugins', gui)
-        self.assertIn('https://help.openai.com/en/articles/12584461-', gui)
-        self.assertIn('UseSystemPasswordChar=true', gui)
-        self.assertIn('const string Mask = "********"', gui)
-        self.assertIn('Local Tunnel: Connected', gui)
-        self.assertIn('go.Text="Save"', gui)
-        self.assertIn('service.Text="Start Service"', gui)
-        self.assertIn('refresh.Text="Refresh Status"', gui)
-        self.assertIn('--non-interactive --configure-only', gui)
-        self.assertIn('config_saved', gui)
-        self.assertNotIn('Configure and Start', gui)
-        self.assertIn('Start Service', gui)
-        self.assertIn('Stop Service', gui)
-        self.assertIn('Auto-start at Windows sign-in', gui)
-        self.assertIn('autostart ', gui)
-        self.assertIn('Refresh Status', gui)
-        self.assertIn('ChatGPT plugin: not verified', gui)
-        self.assertIn('" status"', gui)
-        self.assertIn('DV_RUNTIME_API_KEY', gui)
-        self.assertNotIn('powershell.exe', gui)
-        self.assertIn('Process.GetCurrentProcess().ProcessName', gui)
-        manager = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Launcher.cs").read_text()
-        self.assertIn('RemoteDesktopMCP-Configure.exe', manager)
-        self.assertNotIn('powershell.exe', manager)
+    def test_unified_go_client_has_gui_and_headless_cli(self):
+        client = (Path(__file__).resolve().parents[2] / "client/main.go").read_text()
+        html = (Path(__file__).resolve().parents[2] / "client/ui/index.html").read_text()
+        launcher = (Path(__file__).resolve().parents[1] / "assets/RemoteDesktopMCP-Configure.cs").read_text()
+        for action in ('case "configure":', 'case "status":', 'case "start", "stop":', 'case "gui":'):
+            self.assertIn(action, client)
+        for control in ('Tunnel ID', 'Runtime API Key', 'Save', 'Start Service', 'Refresh Status'):
+            self.assertIn(control, html)
+        self.assertIn('type="password"', html)
+        self.assertIn('remotedesktopmcp.exe', launcher)
+        self.assertNotIn('powershell.exe', launcher)
 
     def test_refuse_runtime_data(self):
         with tempfile.TemporaryDirectory() as d:

@@ -23,117 +23,71 @@ RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主�
 
 ## 2. Quick Start
 
-接下来从安装开始，把电脑连接到 ChatGPT，并通过一次实际的工具调用确认整个流程可用。Windows 主要通过图形界面操作，Linux 和 macOS 则使用安装包自带的终端向导。
+安装 RemoteDesktopMCP，将电脑连接到 ChatGPT，然后通过一次只读工具调用验证。Windows、Linux 和 macOS 共用同一客户端，可使用图形界面或命令行。
 
 ### 2.1. 准备环境
 
-准备一台可以联网的电脑，以及支持自定义 MCP Tunnel 的 ChatGPT 账号或工作区。目前安装包支持 Windows x64、Linux x64 和 macOS Intel，暂不支持 ARM64。
+需要网络连接，以及支持自定义 MCP Tunnel 的 ChatGPT 账号或工作区。当前离线安装包支持 Windows x64、Linux x64 和 Intel macOS。
 
-Tunnel ID 和 Runtime API Key 可以安装完成后再创建，不需要提前修改配置文件。
+### 2.2. 安装
 
-### 2.2. 下载安装
+从 [最新 Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest) 下载对应安装包：
 
-打开 [GitHub Latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest)，从 Assets 中下载对应系统的安装包：
-
-| 系统 | 安装包 |
+| 平台 | 安装包 |
 | --- | --- |
 | Windows x64 | `RemoteDesktopMCP-v*-windows-amd64.exe` |
 | Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
 | macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
 
-Windows 直接运行 EXE，选择安装目录。安装结束时勾选 **Open RemoteDesktopMCP configuration**，就会打开配置窗口；以后也可以从开始菜单的 **RemoteDesktopMCP → Configure Tunnel** 进入。
+运行安装器。Windows 可通过开始菜单的 **Configure Tunnel** 打开配置界面。macOS 和 Linux 可在安装目录执行 `./bin/remotedesktopmcp gui`。没有桌面环境的机器直接使用 [CLI](#3-cli)。
 
-macOS 打开 DMG，运行里面的安装程序。Linux 下载后，在终端进入下载目录并执行：
+### 2.3. 连接 ChatGPT
+
+在 [OpenAI Tunnel 设置](https://platform.openai.com/settings/organization/tunnels)创建 Tunnel ID，再通过 [API Keys](https://platform.openai.com/settings/organization/api-keys) 创建 Runtime API Key。在客户端填写并保存配置，启动服务，确认本地 Tunnel 状态为 **Connected**。
+
+随后打开 [ChatGPT Plugins](https://chatgpt.com/plugins)，使用相同的 Tunnel ID 注册自定义 MCP 插件并完成授权。具体步骤以 [OpenAI 连接指南](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) 为准。
+
+在 ChatGPT 选择插件，调用只读工具 `list_sessions`。即使返回空列表，也说明工具调用成功。
+
+### 2.4. 故障排查
+
+Tunnel 未连接时，检查 ID、密钥、网络和服务状态。Tunnel 已连接但 ChatGPT 无法调用时，检查插件是否注册并在当前会话启用。不要公开密钥或含有私人信息的日志。
+
+## 3. CLI
+
+没有桌面或浏览器时，直接使用命令行。GUI 和 CLI 共用配置文件与运行时，不需要 PowerShell、Bash 配置向导。
+
+### 3.1. 纯命令行安装
+
+Qt Installer Framework 支持通过 `--accept-licenses --default-answer --confirm-command install` 无界面安装。Linux 服务器可使用：
 
 ```bash
 chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
-./RemoteDesktopMCP-v*-linux-amd64.run
+QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
 ```
 
-### 2.3. 配置并启动 Tunnel
+Windows Server Core 可对下载的 `.exe` 安装器使用相同参数，并通过 `--root` 指定目录。macOS SSH 环境可先使用 `hdiutil` 挂载 `.dmg`，再对其中的安装程序使用相同参数。Windows Server Core 和 macOS SSH 的安装流程仍需实机验收，暂不视为已验证的发布能力。
 
-程序安装好了，接下来需要建立本机与 ChatGPT 之间的连接。
+### 3.2. 配置与服务管理
 
-先从 [OpenAI Tunnel 设置](https://platform.openai.com/settings/organization/tunnels)创建 Tunnel，取得 **Tunnel ID**；再到 [API Keys](https://platform.openai.com/settings/organization/api-keys) 创建 **Runtime API Key**。两者分别用于标识连接和验证本机客户端。
-
-Windows 打开 **Configure Tunnel** 后，按顺序操作：
-
-1. 填入 Tunnel ID 和 Runtime API Key，点击 **Save**，把配置保存到本机。
-2. 点击 **Start Service**，启动 Tunnel 服务。
-3. 点击 **Refresh Status**，确认状态为 **Local Tunnel: Connected**。
-
-重新打开配置窗口时，已保存的密钥会以掩码显示。
-
-Linux 和 macOS 在安装目录运行：
+在安装目录执行：
 
 ```bash
-./Configure-RemoteDesktop.sh
+./bin/remotedesktopmcp configure
+./bin/remotedesktopmcp start
+./bin/remotedesktopmcp status
+./bin/remotedesktopmcp stop
 ```
 
-macOS 也可以直接打开 `Configure-RemoteDesktop.command`。按照提示填写 Tunnel ID 和密钥，向导会完成保存与启动。
+Windows 使用 `bin\\remotedesktopmcp.exe`，子命令一致。交互式 `configure` 会隐藏输入的 Runtime API Key。自动化场景可使用 `configure --id <tunnel-id> --api-key-stdin`，通过标准输入传递密钥，避免写入命令参数。
 
-### 2.4. 在 ChatGPT 中验收
-
-本机显示 Connected，说明 Tunnel 已连接。最后还需要告诉 ChatGPT 使用哪个 MCP 插件。
-
-打开 [ChatGPT Plugins](https://chatgpt.com/plugins)，添加自定义 MCP 服务，选择 **Tunnel** 并关联刚才的 Tunnel ID，完成授权。具体入口如果有变化，可以参考 [OpenAI 接入说明](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
-
-随后在 ChatGPT 对话中选择该插件，尝试调用一次只读的 `list_sessions`。只要工具能够正常返回，就说明 ChatGPT 已经可以访问本机 MCP。新安装的环境可能返回空会话列表，这是正常的。
-
-之后使用时，保持电脑和 Tunnel 服务运行即可。
-
-### 2.5. 常见问题
-
-**Tunnel 一直没有连接成功。** 检查 Tunnel ID、密钥和网络，再刷新状态。仍然失败可以查看本地日志，但不要公开密钥。
-
-**本机 Connected，ChatGPT 却调用不了工具。** 检查插件有没有注册成功、Tunnel ID 是否一致，以及当前对话是否选中了该插件。这和本机连接成功是两个不同的环节。
-
-**修改了配置，仍然使用旧连接。** Save 只负责保存。要让新配置生效，依次点击 **Stop Service → Start Service**。
-
-如果工具操作到了 WSL 或另一台电脑，检查实际注册的 Tunnel 和运行服务的设备，不要同时使用同一个 Tunnel ID 启动多个实例。问题仍然存在，可以在 [Issues](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) 提供脱敏后的复现信息。
-
-## 3. Configuration
-
-Windows 的配置窗口除了首次接入，也负责日常的服务管理。各个按钮的用途如下：
-
-| 操作 | 作用 |
-| --- | --- |
-| **Save** | 保存 Tunnel ID 和密钥，不改变服务状态 |
-| **Start Service / Stop Service** | 启动或停止本机服务 |
-| **Refresh Status** | 只读取最新状态 |
-| **Auto-start at Windows sign-in** | 控制当前用户登录后是否自动启动，不影响当前连接 |
-| **Open ChatGPT Plugins** | 打开 [ChatGPT 插件页面](https://chatgpt.com/plugins) |
-
-比如需要更换 Tunnel ID，可以先修改并 Save；如果服务正在运行，再 Stop、Start 一次即可。自动启动是独立设置，关闭它不会马上停止服务。
-
-配置保存在安装目录下的 `config.toml` 和 `runtime/`，包含本机认证信息。迁移或卸载前先停止服务，并备份这些文件。Windows 可以从开始菜单的 **RemoteDesktopMCP → Manage RemoteDesktopMCP** 进入维护和卸载界面。
+服务能否自动恢复取决于平台和登录会话。退回普通后台进程时，重启后不会自动恢复；无需登录的系统服务还需要单独验收。
 
 ## 4. Optional Features
 
-### 4.1. Case 1：通过命令行管理服务
+### 4.1. 连接本地 MCP 客户端
 
-Linux 和 macOS 可以在安装目录使用内置 Node.js 管理服务，不需要重新执行配置向导：
-
-```bash
-# 查看状态
-./bin/node ./scripts/runtime.mjs status
-
-# 停止服务
-./bin/node ./scripts/runtime.mjs stop
-
-# 启动服务
-./bin/node ./scripts/runtime.mjs start
-```
-
-按需要执行其中一条即可。修改 Tunnel ID 或密钥时，重新运行 `./Configure-RemoteDesktop.sh`；macOS 也可以使用 `./Configure-RemoteDesktop.command`。
-
-后台服务由当前用户管理：Windows 的登录自启动使用计划任务，macOS 使用 LaunchAgent，Linux 优先使用用户级 systemd。Linux 在没有 systemd 时会退回普通后台进程，注销或重启后需要手动启动。
-
-### 4.2. Case 2：接入本地 MCP 客户端
-
-除了连接网页版 ChatGPT，本项目也保留了本地 stdio 接入方式。使用支持 stdio 的 MCP 客户端时，可以直接启动 `scripts/proxy.mjs`，不需要配置 Tunnel。
-
-先按 [Development](#5-development) 准备源码和依赖，再在客户端中配置：
+RemoteDesktopMCP 也支持不通过 Tunnel 的本地 stdio 连接。先按 [Development](#5-development) 安装源码依赖，再为 MCP 客户端配置 `scripts/proxy.mjs` 的绝对路径：
 
 ```json
 {
@@ -146,7 +100,7 @@ Linux 和 macOS 可以在安装目录使用内置 Node.js 管理服务，不需�
 }
 ```
 
-将示例路径替换成实际的绝对路径，重新连接客户端后，可同样调用 `list_sessions` 验证。本地 stdio 与前面的 ChatGPT Tunnel 是两种独立的接入方式。
+重新连接客户端，调用 `list_sessions` 验证。
 
 ## 5. Development
 

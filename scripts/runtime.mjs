@@ -18,7 +18,12 @@ const plistFile = path.join(os.homedir(), 'Library/LaunchAgents', `${label}.plis
 function call(program, args, input) { return spawnSync(program, args, { input, encoding: 'utf8', timeout: 30000, windowsHide: true, stdio: 'pipe' }); }
 function systemctl(args) { return call('systemctl', ['--user', ...args]); }
 export function systemdAvailable() { return process.platform === 'linux' && systemctl(['show-environment']).status === 0; }
-export function defaultManager(platform = process.platform) { return platform === 'darwin' ? 'launchd' : platform === 'win32' ? 'scheduled-task' : systemdAvailable() ? 'systemd' : 'background'; }
+// A macOS SSH session may have no gui/<uid> launchd domain. In that case
+// use a user-owned background process rather than relying on a desktop login.
+export function defaultManager(platform = process.platform) {
+  if (platform === 'darwin') return process.platform !== 'darwin' || call('launchctl', ['print', `gui/${process.getuid()}`]).status === 0 ? 'launchd' : 'background';
+  return platform === 'win32' ? 'scheduled-task' : systemdAvailable() ? 'systemd' : 'background';
+}
 export function unitQuote(value) {
   if (/[\n\r\0]/.test(value)) throw new Error('Invalid service path');
   return '"' + value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', () => '$$') + '"';
