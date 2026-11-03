@@ -50,6 +50,47 @@ function powershell(script) {
   return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
     { env, encoding: 'utf8', timeout: 30000, windowsHide: true, stdio: 'pipe' });
 }
+function ensureSystemdUnit() {
+  privateWrite(unitFile, `[Unit]\nDescription=Remote Desktop MCP\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=${unitQuote(process.execPath)} ${unitQuote(runtimeScript)} run\nRestart=on-failure\nRestartSec=5\nUMask=0077\nNoNewPrivileges=true\n\n[Install]\nWantedBy=default.target\n`);
+  if (systemctl(['daemon-reload']).status !== 0)
+    throw new Error('Cannot reload user systemd service');
+}
+export function autostartEnabled() {
+  const manager = state().manager;
+  if (manager === 'scheduled-task') return windowsAutostartEnabled();
+  if (manager === 'systemd')
+    return systemctl(['is-enabled', '--quiet', unitName]).status === 0;
+  if (manager === 'launchd') {
+    const plist = fs.lstatSync(plistFile, { throwIfNoEntry: false });
+    if (!plist) return false;
+    if (!plist.isFile() || plist.isSymbolicLink() ||
+        !fs.readFileSync(plistFile, 'utf8').includes(`<string>${label}</string>`))
+      throw new Error('Existing LaunchAgent is not owned by RemoteDesktopMCP');
+    return true;
+  }
+  return null;
+}
+export function setAutostart(enabled) {
+  if (typeof enabled !== 'boolean') throw new Error('Invalid autostart value');
+  const manager = state().manager;
+  if (manager === 'scheduled-task') return setWindowsAutostart(enabled);
+  if (manager === 'systemd') {
+    if (enabled) ensureSystemdUnit();
+    const result = systemctl([enabled ? 'enable' : 'disable', unitName]);
+    if (result.status !== 0 || autostartEnabled() !== enabled)
+      throw new Error('Cannot change user systemd auto-start');
+    return enabled;
+  }
+  if (manager === 'launchd') {
+    const current = autostartEnabled();
+    if (current === enabled) return enabled;
+    if (enabled) privateWrite(plistFile, launchPlist());
+    else fs.unlinkSync(plistFile);
+    if (autostartEnabled() !== enabled) throw new Error('Cannot change LaunchAgent auto-start');
+    return enabled;
+  }
+  throw new Error('Auto-start is unavailable for background process mode');
+}
 export function windowsAutostartEnabled() {
   if (process.platform !== 'win32') return null;
   const result = powershell(taskScript('auto-status'));
@@ -102,14 +143,15 @@ export async function health(port) {
 export async function status() {
   const s = state();
   const managed = await control() || (s.manager === 'systemd' && systemctl(['is-active', '--quiet', unitName]).status === 0) || (s.manager === 'background' && Boolean(ownedProcess()));
-  return { managed_process_running: Boolean(managed), tunnel_ready: Boolean(managed) && await health(s.port), manager: s.manager, autostart_enabled: s.manager === 'scheduled-task' ? windowsAutostartEnabled() : null, chatgpt_registration: 'not_verified' };
+  return { managed_process_running: Boolean(managed), tunnel_ready: Boolean(managed) && await health(s.port), manager: s.manager, autostart_enabled: autostartEnabled(), chatgpt_registration: 'not_verified' };
 }
 export async function stop() {
   const s = state();
   if (s.manager === 'systemd') {
     if (systemctl(['stop', unitName]).status !== 0) throw new Error('Could not stop managed user service');
   } else if (s.manager === 'launchd') {
-    if (call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]).status !== 0 && await control()) throw new Error('Could not stop LaunchAgent');
+    // Boot out a loaded LaunchAgent, or stop a manually started background process.
+    if (call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]).status !== 0) await control('stop');
   } else {
     await control('stop');
     if (s.manager === 'scheduled-task') powershell(taskScript('stop'));
@@ -126,9 +168,9 @@ export async function start(manager) {
   if (fs.lstatSync(logFile, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error('Refusing symlinked log');
   if (!fs.existsSync(logFile)) privateWrite(logFile, ''); else restrict(logFile);
   if (manager === 'systemd') {
-    privateWrite(unitFile, `[Unit]\nDescription=Remote Desktop MCP\nAfter=network-online.target\n\n[Service]\nType=simple\nExecStart=${unitQuote(process.execPath)} ${unitQuote(runtimeScript)} run\nRestart=on-failure\nRestartSec=5\nUMask=0077\nNoNewPrivileges=true\n\n[Install]\nWantedBy=default.target\n`);
-    for (const args of [['daemon-reload'], ['enable', unitName], ['start', unitName]]) if (systemctl(args).status !== 0) throw new Error('User service setup failed');
-  } else if (manager === 'launchd') {
+    ensureSystemdUnit();
+    if (systemctl(['start', unitName]).status !== 0) throw new Error('Cannot start user systemd service');
+  } else if (manager === 'launchd' && autostartEnabled()) {
     privateWrite(plistFile, launchPlist());
     call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]);
     if (call('launchctl', ['bootstrap', `gui/${process.getuid()}`, plistFile]).status !== 0) throw new Error('LaunchAgent setup failed; use --background if no GUI login domain is available');
@@ -183,9 +225,9 @@ if (isDirectExecution(import.meta.url)) {
     else if (action === 'status') console.log(JSON.stringify(await status(), null, 2));
     else if (action === 'stop') await stop();
     else if (action === 'start') { await start(state().manager); console.log(JSON.stringify(await status(), null, 2)); }
-    else if (action === 'autostart' && ['enable', 'disable'].includes(process.argv[3]) && process.argv.length === 4) {
-      console.log(JSON.stringify({ autostart_enabled: setWindowsAutostart(process.argv[3] === 'enable') }));
+    else if (action === 'autostart' && ['enable', 'disable', 'status'].includes(process.argv[3]) && process.argv.length === 4) {
+      console.log(JSON.stringify({ autostart_enabled: process.argv[3] === 'status' ? autostartEnabled() : setAutostart(process.argv[3] === 'enable') }));
     }
-    else throw new Error('Use start, stop, status, or autostart enable|disable');
+    else throw new Error('Use start, stop, status, or autostart enable|disable|status');
   } catch { console.error('Runtime action failed; run setup to check the local configuration.'); process.exitCode = 1; }
 }

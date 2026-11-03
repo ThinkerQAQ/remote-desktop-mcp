@@ -86,7 +86,7 @@ async function setup() {
     if (!ready) throw new Error('Tunnel is not ready. Configuration is retained. Check credentials/account access and run npm run status, then rerun setup.');
     console.log('Next / 最后一步：ChatGPT Settings → Connectors/Apps → add custom MCP → Tunnel → use your saved Tunnel ID. Verify tools/list and read-only list_sessions.\nhttps://chatgpt.com/#settings/Connectors');
     if (manager === 'background') console.log('Background mode does not restart after reboot/logout. Run bash setup.sh again to restore. / 后台模式不会在重启或注销后自动恢复，重新运行向导即可恢复。');
-    else console.log('User startup configured / 已配置当前用户启动。macOS/Windows resume at login; Linux logout persistence depends on lingering.');
+    else console.log('Service started for the current user. To enable sign-in startup, run: node scripts/runtime.mjs autostart enable / 已启动当前用户服务。登录自启动需单独开启。');
   } finally { muted = false; rl?.close(); }
 }
 if (isDirectExecution(import.meta.url)) {

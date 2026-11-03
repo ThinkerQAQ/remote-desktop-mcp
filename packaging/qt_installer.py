@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import shutil
 import subprocess
@@ -32,6 +33,8 @@ def check_payload(stage: Path, target: str) -> None:
                 "scripts/setup.mjs", "bin/node.exe" if target == "windows" else "bin/node",
                 "bin/tunnel-client.exe" if target == "windows" else "bin/tunnel-client",
                 "bin/RemoteDesktopMCP-Configure.exe" if target == "windows" else "brand/remotedesktopmcp.png",
+                "bin/RemoteDesktopMCP-OpenUI.exe" if target == "windows" else "Open-RemoteDesktop.sh",
+                "scripts/gui.mjs", "scripts/gui.html", "scripts/gui.css", "scripts/gui.js",
                 "RemoteDesktopMCP-Maintenance.exe" if target == "windows" else "brand/remotedesktopmcp.ico",
                 "Configure-RemoteDesktop.ps1" if target == "windows" else "Configure-RemoteDesktop.sh")
     for name in required:
@@ -58,6 +61,21 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
     config.mkdir(parents=True)
     meta.mkdir(parents=True)
     shutil.copytree(stage, data)
+    if target == "darwin":
+        # Finder entry point; the app opens the local configuration UI.
+        bundle = data / "RemoteDesktopMCP.app" / "Contents"
+        executable = bundle / "MacOS" / "RemoteDesktopMCP"
+        executable.parent.mkdir(parents=True)
+        executable.write_text('#!/bin/bash\nroot="$(cd "$(dirname "$0")/../../.." && pwd)"\nexec "$root/bin/node" "$root/scripts/gui.mjs"\n')
+        executable.chmod(0o755)
+        info = {"CFBundleExecutable": "RemoteDesktopMCP",
+                "CFBundleIdentifier": "org.thinkerqaq.remotedesktop",
+                "CFBundleName": "RemoteDesktopMCP",
+                "CFBundleDisplayName": "RemoteDesktopMCP",
+                "CFBundlePackageType": "APPL", "CFBundleVersion": version,
+                "CFBundleShortVersionString": version, "LSUIElement": True}
+        with (bundle / "Info.plist").open("wb") as f:
+            plistlib.dump(info, f)
     installer_config = {
         "Name": "RemoteDesktopMCP",
         "Version": version,
@@ -72,7 +90,7 @@ def prepare(stage: Path, work: Path, version: str, target: str) -> None:
         "WizardShowPageList": "false",
     }
     if target == "windows":
-        installer_config["RunProgram"] = "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe"
+        installer_config["RunProgram"] = "@TargetDir@/bin/RemoteDesktopMCP-OpenUI.exe"
         installer_config["RunProgramDescription"] = "Open RemoteDesktopMCP configuration"
     write_xml(config / "config.xml", "Installer", installer_config)
     write_xml(meta / "package.xml", "Package", {
@@ -115,7 +133,7 @@ Component.prototype.createOperations = function() {
         script += """
     component.addOperation("Mkdir", "@UserStartMenuProgramsPath@/RemoteDesktopMCP");
     component.addOperation("CreateShortcut",
-        "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe",
+        "@TargetDir@/bin/RemoteDesktopMCP-OpenUI.exe",
         "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Configure Tunnel.lnk");
     component.addOperation("CreateShortcut",
         "@TargetDir@/RemoteDesktopMCP-Maintenance.exe",
@@ -126,7 +144,7 @@ Component.prototype.createOperations = function() {
 """
     elif target == "linux":
         # Avoid a dependency on desktop environment-specific menu packages.
-        desktop = 'Type=Application\nName=Configure RemoteDesktopMCP\nTerminal=true\nExec=/bin/bash "@TargetDir@/Configure-RemoteDesktop.sh"\nCategories=Development;Utility;'
+        desktop = 'Type=Application\nName=Configure RemoteDesktopMCP\nTerminal=false\nExec=/bin/bash "@TargetDir@/Open-RemoteDesktop.sh"\nIcon=@TargetDir@/brand/remotedesktopmcp.png\nCategories=Development;Utility;'
         script += f'    component.addOperation("CreateDesktopEntry", "remotedesktopmcp.desktop", {json.dumps(desktop)});\n'
     else:
         script += "    // macOS: configuration launcher is provided as a .command file.\n"
@@ -149,7 +167,7 @@ Component.prototype.finishConfigure = function() {
     if target == "darwin":
         script += """
     installer.executeDetached("/usr/bin/open",
-        ["-a", "Terminal", target + "/Configure-RemoteDesktop.command"], target);
+        ["-a", target + "/RemoteDesktopMCP.app"], target);
 """
         # Finder-run .command launches Terminal, not a hidden daemon.
         launch = data / "Configure-RemoteDesktop.command"
@@ -158,8 +176,7 @@ Component.prototype.finishConfigure = function() {
     elif target == "linux":
         script += """
     installer.executeDetached("/bin/bash",
-        ["-c", 'command -v x-terminal-emulator >/dev/null && exec x-terminal-emulator -e /bin/bash "' +
-          target + '/Configure-RemoteDesktop.sh"'], target);
+        [target + "/Open-RemoteDesktop.sh"], target);
 """
     if target != "windows":
         script += "};\n"

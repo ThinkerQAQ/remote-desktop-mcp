@@ -41,14 +41,14 @@ Open the [latest GitHub Release](https://github.com/ThinkerQAQ/remote-desktop-mc
 | Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
 | macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
 
-On Windows, run the EXE and choose an installation directory. Leave **Open RemoteDesktopMCP configuration** checked on the final page to open the configuration window. You can reopen it later from **Start Menu → RemoteDesktopMCP → Configure Tunnel**.
-
-On macOS, open the DMG and run the installer inside. On Linux, open a terminal in the download directory:
+On Windows, run the EXE and choose an installation directory. On macOS, open the DMG and run the installer inside. On Linux, open a terminal in the download directory:
 
 ```bash
 chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 ./RemoteDesktopMCP-v*-linux-amd64.run
 ```
+
+On the installation completion page, select **Open RemoteDesktopMCP configuration** to open the local configuration page in your browser. You can reopen it from the Windows Start menu, the macOS application, or the Linux application menu.
 
 ### 2.3. Configure and start the Tunnel
 
@@ -56,21 +56,13 @@ With the application installed, we need a connection between the computer and Ch
 
 Create a Tunnel in [OpenAI Tunnel settings](https://platform.openai.com/settings/organization/tunnels) and copy its **Tunnel ID**. Then create a **Runtime API Key** under [API Keys](https://platform.openai.com/settings/organization/api-keys). The ID identifies the connection; the key authenticates the local client.
 
-On Windows, open **Configure Tunnel** and follow these steps:
+Open **Configure Tunnel** and follow these steps:
 
 1. Enter the Tunnel ID and Runtime API Key, then click **Save**.
 2. Click **Start Service** to start the local Tunnel service.
 3. Click **Refresh Status** and check for **Local Tunnel: Connected**.
 
 A saved key appears masked when you reopen the configuration window.
-
-On Linux and macOS, run this command from the installation directory:
-
-```bash
-./Configure-RemoteDesktop.sh
-```
-
-You can also open `Configure-RemoteDesktop.command` on macOS. Follow the prompts to save the Tunnel ID and key; the wizard also starts the service.
 
 ### 2.4. Verify the connection in ChatGPT
 
@@ -94,14 +86,14 @@ If the tools operate on WSL or another computer, check which device owns the reg
 
 ## 3. Configuration
 
-On Windows, the **Configure Tunnel** window also handles everyday service management:
+The same configuration page is available on all three platforms and handles everyday service management:
 
 | Control | Action |
 | --- | --- |
 | **Save** | Save the Tunnel ID and key without changing the service |
 | **Start Service / Stop Service** | Start or stop the local service |
 | **Refresh Status** | Read the current service state |
-| **Auto-start at Windows sign-in** | Control startup for the current Windows user without stopping an active connection |
+| **Auto-start when I sign in** | Control startup for the current Windows user without stopping an active connection |
 | **Open ChatGPT Plugins** | Open the [ChatGPT plugin page](https://chatgpt.com/plugins) |
 
 For example, to change the Tunnel ID, enter the new value and click Save. If the service is running, stop and start it once to use the new settings. Auto-start is a separate preference; turning it off won't immediately disconnect the Tunnel.
@@ -112,7 +104,9 @@ Configuration is stored in `config.toml` and `runtime/` in the installation dire
 
 ### 4.1. Case 1: Manage the service from a terminal
 
-On Linux and macOS, you can manage the installed service without rerunning the setup wizard. From the installation directory:
+You can also configure the Tunnel from a terminal in the installation directory. Run `./bin/node ./scripts/cli-config.mjs` on Linux/macOS or `.\bin\node.exe .\scripts\cli-config.mjs` in Windows PowerShell; the wizard prompts for the Tunnel ID and key.
+
+To manage the service, use the following commands on Linux/macOS:
 
 ```bash
 # Check status
@@ -125,7 +119,7 @@ On Linux and macOS, you can manage the installed service without rerunning the s
 ./bin/node ./scripts/runtime.mjs start
 ```
 
-Run whichever command you need. To change the Tunnel ID or key, rerun `./Configure-RemoteDesktop.sh`, or `./Configure-RemoteDesktop.command` on macOS.
+On Windows, use `./bin/node.exe` instead of `./bin/node`. To manage sign-in startup, run `./bin/node ./scripts/runtime.mjs autostart enable`, replace `enable` with `disable` to turn it off, or use `status` to inspect it. The `./Configure-RemoteDesktop.sh` terminal wizard remains available on Linux/macOS.
 
 Background services run under the current user: Windows uses a Scheduled Task for sign-in startup, macOS uses a LaunchAgent, and Linux prefers user-level systemd. Without systemd, Linux falls back to a background process that must be started manually after logout or reboot.
 

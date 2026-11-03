@@ -80,9 +80,10 @@ def copy_app(source: Path, target: Path) -> None:
     # platform-dependent symlinks. All actual runtime packages are retained.
     shutil.copytree(source / "node_modules", target / "node_modules",
                     ignore=shutil.ignore_patterns(".bin"))
-    for asset in ("Configure-RemoteDesktop.ps1", "Configure-RemoteDesktop.sh"):
+    for asset in ("Configure-RemoteDesktop.ps1", "Configure-RemoteDesktop.sh", "Open-RemoteDesktop.sh"):
         shutil.copy2(ROOT / "packaging/assets" / asset, target / asset)
     (target / "Configure-RemoteDesktop.sh").chmod(0o755)
+    (target / "Open-RemoteDesktop.sh").chmod(0o755)
     brand = target / "brand"
     brand.mkdir()
     shutil.copy2(ROOT / "packaging/assets/remotedesktopmcp.ico", brand / "remotedesktopmcp.ico")
@@ -97,9 +98,10 @@ def build_windows_launchers(target: Path) -> None:
     if not csc.is_file():
         raise FileNotFoundError(f"Windows .NET Framework C# compiler required for GUI launcher: {csc}")
     icon = target / "brand/remotedesktopmcp.ico"
-    for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE")):
+    for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE"), ("RemoteDesktopMCP-OpenUI", "WEBUI")):
         source = ROOT / "packaging/assets" / (
-            "RemoteDesktopMCP-Configure.cs" if switch == "CONFIGURE" else "RemoteDesktopMCP-Launcher.cs")
+            "RemoteDesktopMCP-Configure.cs" if switch == "CONFIGURE" else
+            "RemoteDesktopMCP-OpenUI.cs" if switch == "WEBUI" else "RemoteDesktopMCP-Launcher.cs")
         output = target / (name + ".exe") if switch == "MAINTENANCE" else target / "bin" / (name + ".exe")
         subprocess.run([
             str(csc), "/nologo", "/target:winexe", f"/define:{switch}",

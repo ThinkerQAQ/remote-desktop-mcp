@@ -65,7 +65,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          foreach ($entry in @("dist/stage/bin/RemoteDesktopMCP-Configure.exe", "dist/stage/RemoteDesktopMCP-Maintenance.exe")) {
+          foreach ($entry in @("dist/stage/bin/RemoteDesktopMCP-Configure.exe", "dist/stage/bin/RemoteDesktopMCP-OpenUI.exe", "dist/stage/RemoteDesktopMCP-Maintenance.exe")) {
             if (!(Test-Path $entry)) { throw "Missing native GUI entrypoint: $entry" }
             $process = Start-Process -FilePath (Resolve-Path $entry).Path -ArgumentList "--self-test" -Wait -PassThru
             if ($process.ExitCode -ne 0) { throw "Native GUI selftest failed ($($process.ExitCode)): $entry" }

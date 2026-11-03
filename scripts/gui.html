@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>RemoteDesktopMCP — Configure Tunnel</title>
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="stylesheet" href="/gui.css">
+  <script src="/gui.js" defer></script>
+</head>
+<body>
+<main class="shell">
+  <header class="header">
+    <div class="brand"><img class="brand-icon" src="/icon.png" alt=""><div><h1>RemoteDesktopMCP</h1><p>Configure Tunnel</p></div></div>
+    <span class="tag">Local configuration</span>
+  </header>
+  <section class="panel">
+    <h2>Connection</h2>
+    <p class="subtitle">Use your OpenAI Tunnel ID and runtime API key to connect ChatGPT to this computer.</p>
+    <div class="setup-links">
+      <a href="https://platform.openai.com/settings/organization/tunnels" target="_blank" rel="noopener noreferrer">Create or manage Tunnel ID</a>
+      <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Create runtime API key</a>
+    </div>
+    <form id="config-form" autocomplete="off">
+      <label for="tunnelId">Tunnel ID</label>
+      <input id="tunnelId" type="text" placeholder="tunnel_..." spellcheck="false" required maxlength="128">
+      <label for="apiKey">Runtime API key</label>
+      <input id="apiKey" type="password" placeholder="Enter a runtime API key" autocomplete="new-password" maxlength="2048">
+      <p id="keyHint" class="help">The key is saved locally and never displayed again.</p>
+      <div class="actions">
+        <button id="save" class="primary" type="submit">Save</button>
+        <button id="service" type="button" disabled>Start Service</button>
+        <button id="refresh" type="button">Refresh Status</button>
+      </div>
+    </form>
+    <label class="checkbox"><input id="autostart" type="checkbox" disabled><span>Auto-start when I sign in</span></label>
+    <div class="status-line">
+      <span id="indicator" class="indicator"></span>
+      <div><strong id="connection">Local Tunnel: checking…</strong><p id="serviceDetails">Reading the local service status.</p></div>
+    </div>
+    <p id="pluginStatus" class="plugin-status">ChatGPT plugin registration: check in ChatGPT</p>
+    <p id="message" class="message" aria-live="polite"></p>
+  </section>
+  <footer>
+    <a class="chatgpt" href="https://chatgpt.com/plugins" target="_blank" rel="noopener noreferrer">Open ChatGPT Plugins</a>
+    <a href="https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt" target="_blank" rel="noopener noreferrer">Connection guide</a>
+    <p>This page is only available on this computer. It does not expose a public MCP port.</p>
+  </footer>
+</main>
+</body>
+</html>

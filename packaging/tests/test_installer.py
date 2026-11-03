@@ -17,11 +17,15 @@ class InstallerTests(unittest.TestCase):
         (stage / "LICENSE").write_text("test license")
         (stage / "scripts/proxy.mjs").write_text("// stub")
         (stage / "scripts/setup.mjs").write_text("// stub")
+        for name in ("gui.mjs", "gui.html", "gui.css", "gui.js"):
+            (stage / "scripts" / name).write_text("// stub")
+        (stage / "Open-RemoteDesktop.sh").write_text("#!/bin/sh\n")
         (stage / "node_modules/lib/data/fixture.json").write_text("{}")
         (stage / "bin" / ("node.exe" if platform == "windows" else "node")).write_text("node")
         (stage / "bin" / ("tunnel-client.exe" if platform == "windows" else "tunnel-client")).write_text("client")
         if platform == "windows":
             (stage / "bin/RemoteDesktopMCP-Configure.exe").write_text("stub")
+            (stage / "bin/RemoteDesktopMCP-OpenUI.exe").write_text("stub")
             (stage / "RemoteDesktopMCP-Maintenance.exe").write_text("stub")
         (stage / "brand").mkdir()
         (stage / "brand/remotedesktopmcp.ico").write_text("stub")
@@ -45,9 +49,25 @@ class InstallerTests(unittest.TestCase):
                 else:
                     self.assertNotIn("finishConfigure", script)
                     self.assertIn("function Component() {}", script)
-                    self.assertIn("RemoteDesktopMCP-Configure.exe", script)
+                    self.assertIn("RemoteDesktopMCP-OpenUI.exe", script)
                 self.assertNotIn("Runtime API key", script)
-                self.assertTrue((dest / "packages/org.thinkerqaq.remotedesktop/data/node_modules/lib/data/fixture.json").exists())
+                data = dest / "packages/org.thinkerqaq.remotedesktop/data"
+                self.assertTrue((data / "node_modules/lib/data/fixture.json").exists())
+                self.assertTrue((data / "scripts/gui.mjs").is_file())
+                if platform == "darwin":
+                    import plistlib
+                    bundle = data / "RemoteDesktopMCP.app/Contents"
+                    info = plistlib.loads((bundle / "Info.plist").read_bytes())
+                    self.assertEqual(info["CFBundleExecutable"], "RemoteDesktopMCP")
+                    self.assertIn("scripts/gui.mjs", (bundle / "MacOS/RemoteDesktopMCP").read_text())
+                    self.assertIn("RemoteDesktopMCP.app", script)
+                    self.assertNotIn('"-a", "Terminal"', script)
+                if platform == "linux":
+                    self.assertIn("Terminal=false", script)
+                    self.assertIn("Open-RemoteDesktop.sh", script)
+                    self.assertNotIn("x-terminal-emulator", script)
+                if platform == "windows":
+                    self.assertIn("RemoteDesktopMCP-OpenUI.exe", script)
 
     def test_windows_config_shortcut_uses_native_gui(self):
         with tempfile.TemporaryDirectory() as d:
@@ -56,7 +76,7 @@ class InstallerTests(unittest.TestCase):
             dest = root / "out"
             prepare(stage, dest, "0.4.0", "windows")
             script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
-            self.assertIn("RemoteDesktopMCP-Configure.exe", script)
+            self.assertIn("RemoteDesktopMCP-OpenUI.exe", script)
             self.assertIn("RemoteDesktopMCP-Maintenance.exe", script)
             self.assertNotIn("powershell.exe", script)
 
@@ -92,7 +112,7 @@ class InstallerTests(unittest.TestCase):
             script = (dest / "packages/org.thinkerqaq.remotedesktop/meta/installscript.qs").read_text()
             self.assertIn("RemoteDesktopMCP-Maintenance.exe", script)
             self.assertIn("RemoteDesktopMCP-Uninstaller.exe", script)
-            self.assertIn("RemoteDesktopMCP-Configure.exe", script)
+            self.assertIn("RemoteDesktopMCP-OpenUI.exe", script)
 
     def test_configuration_links_only_in_app_not_installer_completion(self):
         import xml.etree.ElementTree as ET
@@ -104,7 +124,7 @@ class InstallerTests(unittest.TestCase):
                 prepare(stage, dest, "0.4.0", platform)
                 config = ET.parse(dest / "config/config.xml")
                 if platform == "windows":
-                    self.assertEqual(config.findtext("./RunProgram"), "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe")
+                    self.assertEqual(config.findtext("./RunProgram"), "@TargetDir@/bin/RemoteDesktopMCP-OpenUI.exe")
                     self.assertEqual(config.findtext("./RunProgramDescription"), "Open RemoteDesktopMCP configuration")
                 else:
                     text = (dest / "packages/org.thinkerqaq.remotedesktop/meta/configure.ui").read_text()
@@ -158,7 +178,7 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn('powershell.exe', gui)
         self.assertIn('Process.GetCurrentProcess().ProcessName', gui)
         manager = (Path(__file__).resolve().parents[1] / "assets" / "RemoteDesktopMCP-Launcher.cs").read_text()
-        self.assertIn('RemoteDesktopMCP-Configure.exe', manager)
+        self.assertIn('RemoteDesktopMCP-OpenUI.exe', manager)
         self.assertNotIn('powershell.exe', manager)
 
     def test_refuse_runtime_data(self):

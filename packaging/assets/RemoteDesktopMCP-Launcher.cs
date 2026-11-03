@@ -38,9 +38,9 @@ internal static class RemoteDesktopLauncher
 
     private static void Configure()
     {
-        // The configuration form is owned by a native RemoteDesktopMCP WinExe,
-        // and its taskbar icon is the embedded app icon.
-        Launch(Path.Combine("bin", "RemoteDesktopMCP-Configure.exe"), "");
+        // All platforms open the same local browser-based configuration page.
+        // The branded launcher has the Windows GUI subsystem (no console).
+        Launch(Path.Combine("bin", "RemoteDesktopMCP-OpenUI.exe"), "");
     }
 
     private static Form CreateManagementWindow()
