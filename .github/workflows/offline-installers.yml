@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packaging/**'
+      - 'client/**'
       - 'scripts/**'
       - 'package*.json'
       - '.github/workflows/offline-installers.yml'
