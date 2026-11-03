@@ -124,9 +124,10 @@ export async function createGuiServer({ services = defaultServices(), port = 0, 
       if (req.method !== 'POST' || !['/api/save', '/api/service', '/api/autostart'].includes(route)) {
         respond(res, 404, { error: 'Not found' }); return;
       }
-      const data = await readJSON(req);
       busy = true;
       try {
+        // Hold the lock while reading the request body as well as executing.
+        const data = await readJSON(req);
         let output;
         if (route === '/api/save') output = await services.save(data);
         else if (route === '/api/service' && ['start', 'stop'].includes(data.action))
