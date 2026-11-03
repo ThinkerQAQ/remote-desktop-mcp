@@ -256,6 +256,11 @@ func installNativeService(root, account, scope, password string) error {
 	if scope == "system" && (account == "" || strings.EqualFold(account, "root")) {
 		return errors.New("system service requires an explicitly selected unprivileged account")
 	}
+	if scope == "system" && runtime.GOOS != "windows" {
+		if err := verifyServiceDataOwner(root, account); err != nil {
+			return err
+		}
+	}
 	cfg, e := daemonConfig(root, account, scope)
 	if e != nil {
 		return e

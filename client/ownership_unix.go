@@ -3,8 +3,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"syscall"
 )
@@ -23,6 +25,26 @@ func preserveExistingOwner(temp string, existing os.FileInfo) error {
 	}
 	return os.Chown(temp, int(stat.Uid), int(stat.Gid))
 }
+func verifyServiceDataOwner(root, account string) error {
+	target, err := user.Lookup(account)
+	if err != nil {
+		return err
+	}
+	uid, err := strconv.Atoi(target.Uid)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(filepath.Join(root, "runtime", "credentials.json"))
+	if err != nil {
+		return err
+	}
+	actual, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || actual.Uid != uint32(uid) {
+		return fmt.Errorf("service account must own the private runtime credentials")
+	}
+	return nil
+}
+
 func assignServiceOwner(file, account string) error {
 	u, e := user.Lookup(account)
 	if e != nil {
