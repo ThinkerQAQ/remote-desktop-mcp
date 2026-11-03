@@ -4,9 +4,8 @@
 
 - [1. Introduction](#1-introduction)
 - [2. Quick Start](#2-quick-start)
-- [3. Optional Features](#3-optional-features)
-- [4. Development](#4-development)
-- [5. License](#5-license)
+- [3. Development](#3-development)
+- [4. License](#4-license)
 
 ## 1. Introduction
 
@@ -101,33 +100,6 @@ QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/Re
 
 Windows 使用 `.\bin\remotedesktopmcp.exe`，子命令相同。交互式配置会隐藏 Runtime API Key；自动化场景可使用 `configure --id <tunnel-id> --api-key-stdin`，通过标准输入传递密钥。停止服务使用 `stop`。
 
-#### 2.2.3. 开机自启（可选）
-
-普通 `start` 启动当前用户的后台进程。要在开机后自动运行，可先完成配置，再注册操作系统服务。
-
-Linux / macOS 用户会话：
-
-```bash
-./bin/remotedesktopmcp service --scope user install
-./bin/remotedesktopmcp start
-```
-
-只有 SSH 的 macOS 或 Linux Server 可以注册系统级服务，但必须指定能够访问私有配置的低权限账号：
-
-```bash
-sudo ./bin/remotedesktopmcp service --scope system --user YOUR_OS_USER install
-sudo ./bin/remotedesktopmcp start
-```
-
-Windows Server Core 需要先以服务账号完成配置，再使用具备管理权限的终端注册 Windows Service（账号密码隐藏输入）：
-
-```powershell
-.\bin\remotedesktopmcp.exe service --scope system --user "DOMAIN\restricted-user" install
-.\bin\remotedesktopmcp.exe start
-```
-
-系统服务需要相应权限；升级旧版本时先清理旧的自动启动任务，避免多个实例同时运行。完整的无人登录重启恢复仍需独立验收。
-
 ### 2.3. 在 ChatGPT 验证
 
 打开 [ChatGPT Plugins](https://chatgpt.com/plugins)，使用相同的 Tunnel ID 注册自定义 MCP 插件并完成授权。具体步骤见 [OpenAI 连接指南](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
@@ -138,26 +110,7 @@ Windows Server Core 需要先以服务账号完成配置，再使用具备管理
 
 Tunnel 未连接时，检查 ID、密钥、网络和服务状态。Tunnel 已连接但 ChatGPT 无法调用时，检查插件是否注册并在当前会话启用。不要公开密钥或含有私人信息的日志。
 
-## 3. Optional Features
-
-### 3.1. 连接本地 MCP 客户端
-
-RemoteDesktopMCP 也支持不通过 Tunnel 的本地 stdio 连接。先按 [Development](#4-development) 安装源码依赖，再为 MCP 客户端配置 `scripts/proxy.mjs` 的绝对路径：
-
-```json
-{
-  "mcpServers": {
-    "desktop": {
-      "command": "node",
-      "args": ["/absolute/path/remote-desktop-mcp/scripts/proxy.mjs"]
-    }
-  }
-}
-```
-
-重新连接客户端，调用 `list_sessions` 验证。
-
-## 4. Development
+## 3. Development
 
 如果只是使用安装包，不需要本节。需要修改源码或运行测试时，准备 Git，以及符合 [package.json](package.json) 要求的 Node.js 和 npm：
 
@@ -174,7 +127,7 @@ npm run audit:high
 
 代码变更通过 PR Review 和 Squash Merge 合入。安装包与正式版本的构建流程分别见 [Installer CI](.github/workflows/offline-installers.yml) 和 [Release CI](.github/workflows/release.yml)。
 
-## 5. License
+## 4. License
 
 原创代码使用 [Apache-2.0](LICENSE)，第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
