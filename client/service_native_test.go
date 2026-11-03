@@ -71,3 +71,12 @@ func TestControlPlaneMustMatchExactInstallation(t *testing.T) {
 		t.Fatal("control accepted another installation")
 	}
 }
+func TestDaemonStopsWithoutConfiguredRuntime(t *testing.T) {
+	d := &daemon{root: t.TempDir()}
+	if err := d.Start(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Stop(nil); err != nil {
+		t.Fatalf("failed to stop a freshly starting worker: %v", err)
+	}
+}

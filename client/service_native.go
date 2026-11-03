@@ -155,25 +155,46 @@ func stopWorker(root string) error {
 }
 
 type daemon struct {
-	root    string
-	process *exec.Cmd
-	done    chan error
+	root     string
+	stopping chan struct{}
+	done     chan struct{}
 }
 
 func (d *daemon) Start(s kservice.Service) error {
-	// The platform service manager owns this process; it must not fork into its own background daemon.
-	d.done = make(chan error, 1)
-	go func() { d.done <- launchRuntime(d.root) }()
+	// Keep a single OS-managed foreground process and retry transient child exits.
+	d.stopping = make(chan struct{})
+	d.done = make(chan struct{})
+	go func() {
+		defer close(d.done)
+		for {
+			select {
+			case <-d.stopping:
+				return
+			default:
+			}
+			_ = launchRuntime(d.root)
+			select {
+			case <-d.stopping:
+				return
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}()
 	return nil
 }
 func (d *daemon) Stop(s kservice.Service) error {
-	// Stop gracefully through a token-bound loopback control plane, never kill an unrelated PID.
-	_ = localControl(d.root, "stop")
-	select {
-	case <-d.done:
-	case <-time.After(3 * time.Second):
+	// Handle Stop racing with startup, without ever signalling an unrelated PID.
+	close(d.stopping)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = localControl(d.root, "stop")
+		select {
+		case <-d.done:
+			return nil
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
-	return nil
+	return errors.New("tunnel worker did not stop before deadline")
 }
 
 func serviceName(root string) string {
