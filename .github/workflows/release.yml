@@ -141,8 +141,11 @@ jobs:
         run: |
           $installer = (Get-ChildItem dist/RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
           $root = Join-Path $env:RUNNER_TEMP 'dv-headless-windows'
-          & $installer --root $root --accept-licenses --default-answer --confirm-command install
-          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI install failed' }
+          # Qt GUI-subsystem bootstrapper can launch a child process. Wait for
+          # the whole installer process tree before validating the installation.
+          $process = Start-Process -FilePath $installer -ArgumentList @('--root', $root, '--accept-licenses', '--default-answer', '--confirm-command', 'install') -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Windows CLI installer failed ($($process.ExitCode))" }
+          if (!(Test-Path (Join-Path $root 'bin/remotedesktopmcp.exe'))) { throw 'Windows CLI install did not produce the bundled client' }
           & (Join-Path $root 'bin/remotedesktopmcp.exe') --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Windows CLI client missing' }
       - name: Test macOS DMG installation over CLI without a login GUI
