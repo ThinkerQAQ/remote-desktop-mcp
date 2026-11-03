@@ -11,11 +11,15 @@
 
 ## 1. Introduction
 
-Suppose you want ChatGPT to inspect a log on your computer, edit a file, or run a terminal command. Without a local connection, you would normally have to upload the file or copy commands and results back and forth. RemoteDesktopMCP provides that connection: it makes [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander) tools available to ChatGPT through an OpenAI Secure MCP Tunnel.
+RemoteDesktopMCP started with a practical goal: I wanted to use ChatGPT in the browser to work directly with files and tools on my computer—for example, reading project code, editing documentation, or running terminal commands.
 
-The tools cover file search, file editing, and terminal commands. This is not a screen-sharing application or a graphical mouse-and-keyboard controller. Commands run with the permissions of the operating-system account that starts the service.
+ChatGPT can generate code and reason through problems, but a browser conversation alone cannot access my local files or development environment. To make it useful for these tasks, it needs tools that can perform actions on the computer.
 
-The Windows, Linux, and macOS installers already include Node.js, the required dependencies, and the Tunnel Client. You do not need to install a separate runtime or set up WSL for a normal Windows installation.
+I initially considered building those tools myself, then found that [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander) already provides file operations, search, and terminal commands through MCP. There was no reason to rebuild that functionality. The remaining question was **how to connect browser-based ChatGPT to tools running locally**.
+
+RemoteDesktopMCP uses OpenAI Secure MCP Tunnel for that connection. A client on the computer establishes an outbound connection to OpenAI, allowing ChatGPT to call the local Desktop Commander tools without exposing a local MCP port to the public internet or relying on Desktop Commander's hosted remote service.
+
+The project also provides installers, configuration, and service management for Windows, Linux, and macOS. Once installed, you configure a Tunnel, start the service, and register the plugin in ChatGPT to work with local files and terminal commands from the browser.
 
 ## 2. Quick Start
 

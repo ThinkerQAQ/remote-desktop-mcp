@@ -11,11 +11,15 @@
 
 ## 1. Introduction
 
-假设我们想让 ChatGPT 帮忙查看电脑上的日志、修改文件，或者运行一条终端命令。通常需要先把文件上传，或者手动复制命令和执行结果。RemoteDesktopMCP 解决的就是这类本地操作的问题：通过 OpenAI Secure MCP Tunnel，把电脑上的 [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander) 工具接入 ChatGPT。
+最开始开发 RemoteDesktopMCP，是因为我想直接使用网页版 ChatGPT 完成一些本地工作，例如阅读项目代码、修改文档，或者执行终端命令。
 
-它提供文件搜索、读写和终端命令能力，不是共享桌面画面、远程操作鼠标的工具。服务以当前操作系统用户的权限运行，因此也只能访问这个用户有权限操作的资源。
+ChatGPT 已经可以生成代码、分析问题，但它不能直接访问我电脑上的文件和开发环境。要让它真正参与这些工作，还需要一套能够在本机执行操作的工具。
 
-现在 Windows、Linux 和 macOS 都有完整的安装包，里面已经包含 Node.js、运行依赖和 Tunnel Client。正常安装不需要另外准备 Node.js，也不需要 Windows 用户先配置 WSL。
+原本准备自己实现，后来发现 [Desktop Commander](https://github.com/wonderwhy-er/DesktopCommander) 已经提供了文件读写、搜索和终端命令等 MCP 工具，没有必要重复开发。剩下的问题是：**怎样让网页版 ChatGPT 连接到这些运行在本地的工具？**
+
+RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主动连接 OpenAI，ChatGPT 再通过 Tunnel 调用本地的 Desktop Commander，无需将本地 MCP 服务端口暴露到公网，也不需要依赖 Desktop Commander 的第三方远程托管服务。
+
+项目在此基础上补齐了 Windows、Linux 和 macOS 的安装、配置和服务管理。安装完成后，配置 Tunnel、启动服务并在 ChatGPT 注册插件，就可以直接从网页版 ChatGPT 操作本地文件和终端。
 
 ## 2. Quick Start
 
