@@ -50,8 +50,6 @@ chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 ./RemoteDesktopMCP-v*-linux-amd64.run
 ```
 
-以上命令假设目录中只有一个匹配的安装包。安装器已经带齐运行依赖，不需要下载源码或额外执行 npm 安装命令。
-
 ### 2.3. 配置并启动 Tunnel
 
 程序安装好了，接下来需要建立本机与 ChatGPT 之间的连接。
@@ -64,7 +62,7 @@ Windows 打开 **Configure Tunnel** 后，按顺序操作：
 2. 点击 **Start Service**，启动 Tunnel 服务。
 3. 点击 **Refresh Status**，确认状态为 **Local Tunnel: Connected**。
 
-这里把 Save 和 Start 分开，是为了以后修改配置时不会中断正在运行的服务。重新打开窗口时，已保存的密钥会以掩码显示，不需要再次输入。
+重新打开配置窗口时，已保存的密钥会以掩码显示。
 
 Linux 和 macOS 在安装目录运行：
 

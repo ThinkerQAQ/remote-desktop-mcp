@@ -50,8 +50,6 @@ chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 ./RemoteDesktopMCP-v*-linux-amd64.run
 ```
 
-The Linux commands assume there is only one matching installer in the directory. All installers include the runtime and dependencies, so you don't need a source archive or a separate npm installation.
-
 ### 2.3. Configure and start the Tunnel
 
 With the application installed, we need a connection between the computer and ChatGPT.
@@ -64,7 +62,7 @@ On Windows, open **Configure Tunnel** and follow these steps:
 2. Click **Start Service** to start the local Tunnel service.
 3. Click **Refresh Status** and check for **Local Tunnel: Connected**.
 
-Save is separate from Start so changing configuration later won't interrupt a running service. A saved key appears masked when you reopen the window.
+A saved key appears masked when you reopen the configuration window.
 
 On Linux and macOS, run this command from the installation directory:
 
