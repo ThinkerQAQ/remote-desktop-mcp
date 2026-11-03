@@ -10,14 +10,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 type persistedSetup struct {
-	ID         string   `json:"id"`
-	Tunnel     string   `json:"tunnel"`
-	TunnelArgs []string `json:"tunnelArgs"`
-	Port       int      `json:"port"`
-	Manager    string   `json:"manager"`
+	Autostart   *bool    `json:"autostart_enabled,omitempty"`
+	AutoConnect *bool    `json:"tunnel_auto_connect,omitempty"`
+	Revision    string   `json:"revision,omitempty"`
+	ID          string   `json:"id"`
+	Tunnel      string   `json:"tunnel"`
+	TunnelArgs  []string `json:"tunnelArgs"`
+	Port        int      `json:"port"`
+	Manager     string   `json:"manager"`
 }
 type persistedCredentials struct {
 	APIKey string `json:"apiKey"`
@@ -131,11 +136,28 @@ func writePrivate(path string, content []byte) error {
 	}
 	return protectPrivate(path, false)
 }
+func savedKey(root string) (string, error) {
+	b, e := os.ReadFile(filepath.Join(root, "runtime", "credentials.json"))
+	var saved persistedCredentials
+	if e != nil || json.Unmarshal(b, &saved) != nil || saved.APIKey == "" || strings.ContainsAny(saved.APIKey, "\r\n\x00") || strings.Trim(saved.APIKey, "*") == "" {
+		return "", errors.New("valid saved runtime API key required")
+	}
+	return saved.APIKey, nil
+}
+func validateSavedConnection(root string) error {
+	setup, err := readSetup(root)
+	if err != nil || !tunnelIDPattern.MatchString(setup.ID) {
+		return errors.New("save a valid Tunnel ID first")
+	}
+	_, err = savedKey(root)
+	return err
+}
+
 func saveNative(root, id, key string) error {
 	if !tunnelIDPattern.MatchString(id) {
 		return errors.New("invalid Tunnel ID")
 	}
-	if strings.ContainsAny(key, "\r\n\x00") {
+	if strings.ContainsAny(key, "\r\n\x00") || (key != "" && strings.Trim(key, "*") == "") {
 		return errors.New("API key must be a single line")
 	}
 	runtimeDir := filepath.Join(root, "runtime")
@@ -146,24 +168,18 @@ func saveNative(root, id, key string) error {
 	if setup.Tunnel != "" && setup.Tunnel != tunnel(root) {
 		return errors.New("existing tunnel executable differs; migrate configuration explicitly")
 	}
+	previousKey, _ := savedKey(root)
 	if key == "" {
-		b, e := os.ReadFile(filepath.Join(runtimeDir, "credentials.json"))
-		if e != nil {
+		if previousKey == "" {
 			return errors.New("runtime API key required for new connection")
 		}
-		var saved persistedCredentials
-		if json.Unmarshal(b, &saved) != nil || saved.APIKey == "" {
-			return errors.New("existing API key is invalid")
-		}
-		key = saved.APIKey
+		key = previousKey
 	}
 	if info, e := os.Lstat(filepath.Join(root, "config.toml")); e == nil {
 		if !info.Mode().IsRegular() {
 			return errors.New("refusing existing non-regular config")
 		}
-		if setup.ID == "" {
-			return errors.New("config.toml is not owned by this installation")
-		}
+
 	} else if !os.IsNotExist(e) {
 		return e
 	}
@@ -175,7 +191,33 @@ func saveNative(root, id, key string) error {
 			return err
 		}
 	}
-	config := fmt.Sprintf("[mcp]\nfilter_log_notifications = true\n\n[tunnel]\nid = %q\napi_key_env = \"OPENAI_API_KEY\"\nhealth_port = %d\n", id, port)
+	// Merge connection fields only; preserve Desktop Commander settings.
+	config := map[string]any{}
+	configPath := filepath.Join(root, "config.toml")
+	if raw, err := os.ReadFile(configPath); err == nil {
+		if toml.Unmarshal(raw, &config) != nil {
+			return errors.New("invalid existing config.toml")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if config["setup"] != nil {
+		return errors.New("legacy setup detected; stop its runtime and remove the legacy setup section before configuring the Go client")
+	}
+	// Reusing identical credentials must not rewrite files or mark the service stale.
+	if setup.Revision != "" && setup.ID == id && previousKey == key {
+		return nil
+	}
+	setup.Revision = sessionToken()
+	if config["mcp"] == nil {
+		config["mcp"] = map[string]any{"filter_log_notifications": true}
+	}
+	config["tunnel"] = map[string]any{"id": id, "api_key_env": "OPENAI_API_KEY", "health_port": port}
+	encoded, err := toml.Marshal(config)
+	if err != nil {
+		return errors.New("cannot encode configuration")
+	}
+
 	payload, e := makeTunnel(root, id, port)
 	if e != nil {
 		return e
@@ -201,7 +243,7 @@ func saveNative(root, id, key string) error {
 	if e = writePrivate(filepath.Join(runtimeDir, "tunnel.yaml"), payload); e != nil {
 		return e
 	}
-	if e = writePrivate(filepath.Join(root, "config.toml"), []byte(config)); e != nil {
+	if e = writePrivate(filepath.Join(root, "config.toml"), encoded); e != nil {
 		return e
 	}
 	return writePrivate(filepath.Join(runtimeDir, "setup.json"), record)

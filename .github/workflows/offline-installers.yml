@@ -141,6 +141,11 @@ jobs:
           env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen "$installer" --root "$RUNNER_TEMP/dv-headless-macos" --accept-licenses --default-answer --confirm-command install
           test -x "$RUNNER_TEMP/dv-headless-macos/bin/remotedesktopmcp"
           "$RUNNER_TEMP/dv-headless-macos/bin/remotedesktopmcp" --self-test
+      - name: Verify Windows login startup and independent Tunnel controls
+        if: runner.os == 'Windows'
+        run: |
+          node scripts/verify-startup.mjs
+          node scripts/verify-startup.mjs --legacy
       - name: Verify Windows installer does not open a console
         if: runner.os == 'Windows'
         shell: pwsh

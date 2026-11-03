@@ -136,9 +136,9 @@ class InstallerTests(unittest.TestCase):
         client = (Path(__file__).resolve().parents[2] / "client/main.go").read_text()
         html = (Path(__file__).resolve().parents[2] / "client/ui/index.html").read_text()
         launcher = (Path(__file__).resolve().parents[1] / "assets/RemoteDesktopMCP-Configure.cs").read_text()
-        for action in ('case "configure":', 'case "status":', 'case "start", "stop":', 'case "gui":'):
+        for action in ('case "configure":', 'case "status":', 'case "start", "stop", "restart":', 'case "connect", "disconnect":', 'case "gui":'):
             self.assertIn(action, client)
-        for control in ('Tunnel ID', 'Runtime API Key', 'Save', 'Start Service', 'Refresh Status'):
+        for control in ('Tunnel ID', 'Runtime API Key', 'Save', 'Start Service', 'Restart Service', 'Connect Tunnel', 'id="autostart"', 'id="auto-connect"'):
             self.assertIn(control, html)
         self.assertIn('type="password"', html)
         self.assertIn('remotedesktopmcp.exe', launcher)

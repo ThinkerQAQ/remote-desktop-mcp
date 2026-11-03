@@ -6,7 +6,41 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
+
+func TestConnectionSavePreservesDesktopSettings(t *testing.T) {
+	root := t.TempDir()
+	config := []byte("[mcp]\nfilter_log_notifications = false\n\n[desktop]\ncustom_setting = 'preserve me'\n")
+	if err := os.WriteFile(filepath.Join(root, "config.toml"), config, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveNative(root, "tunnel_DESKTOP", "synthetic-key"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved map[string]any
+	if err := toml.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved["mcp"].(map[string]any)["filter_log_notifications"] != false || saved["desktop"].(map[string]any)["custom_setting"] != "preserve me" {
+		t.Fatal("connection save overwrote desktop settings")
+	}
+	if saved["tunnel"].(map[string]any)["id"] != "tunnel_DESKTOP" {
+		t.Fatal("connection was not saved")
+	}
+	tunnel, err := os.ReadFile(filepath.Join(root, "runtime", "tunnel.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(tunnel), "proxy.mjs") || strings.Contains(string(tunnel), "launch.mjs") {
+		t.Fatal("tunnel does not launch Desktop Commander's proxy")
+	}
+}
 
 func TestNativeSaveRejectsInvalidCredentials(t *testing.T) {
 	root := t.TempDir()
