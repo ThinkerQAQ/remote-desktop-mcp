@@ -4,7 +4,7 @@
 
 - [1. Introduction](#1-introduction)
 - [2. Quick Start](#2-quick-start)
-- [3. Configuration](#3-configuration)
+- [3. CLI](#3-cli)
 - [4. Optional Features](#4-optional-features)
 - [5. Development](#5-development)
 - [6. License](#6-license)
@@ -31,15 +31,61 @@ RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主�
 
 ### 2.2. 安装
 
-从 [最新 Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest) 下载对应安装包：
+从 [最新 Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest) 下载对应平台的安装包。
 
-| 平台 | 安装包 |
-| --- | --- |
-| Windows x64 | `RemoteDesktopMCP-v*-windows-amd64.exe` |
-| Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
-| macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
+#### 2.2.1. 命令行
 
-运行安装器。Windows 可通过开始菜单的 **Configure Tunnel** 打开配置界面。macOS 和 Linux 可在安装目录执行 `./bin/remotedesktopmcp gui`。没有桌面环境的机器直接使用 [CLI](#3-cli)。
+##### Windows
+
+在下载目录打开终端：
+
+
+```powershell
+$installer = (Get-ChildItem .\RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
+Start-Process -FilePath $installer -ArgumentList '--accept-licenses --default-answer --confirm-command install' -Wait
+```
+
+
+##### macOS
+
+挂载 DMG 并运行其中的安装器：
+
+
+```bash
+dmg=$(find . -maxdepth 1 -name 'RemoteDesktopMCP-v*-darwin-amd64.dmg' -print -quit)
+mount=$(mktemp -d)
+hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+app=$(find "$mount" -maxdepth 1 -name '*.app' -print -quit)
+installer=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)
+QT_QPA_PLATFORM=offscreen "$installer" --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
+hdiutil detach "$mount"
+```
+
+
+##### Linux
+
+
+```bash
+chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
+QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
+```
+
+
+安装后通过 [CLI](#3-cli) 配置连接和管理服务。
+
+#### 2.2.2. 图形界面
+
+##### Windows
+
+运行 `RemoteDesktopMCP-v*-windows-amd64.exe`，按照安装向导完成安装，然后从开始菜单打开 **Configure Tunnel**。
+
+##### macOS
+
+打开 `RemoteDesktopMCP-v*-darwin-amd64.dmg`，运行其中的安装程序。安装完成时勾选 **Open RemoteDesktopMCP configuration**，即可在浏览器中打开配置界面。
+
+##### Linux
+
+在桌面环境中运行 `RemoteDesktopMCP-v*-linux-amd64.run`。如果提示没有执行权限，先在文件属性中允许作为程序运行。安装完成时勾选 **Open RemoteDesktopMCP configuration**，即可在浏览器中打开配置界面。
 
 ### 2.3. 连接 ChatGPT
 
@@ -57,18 +103,7 @@ Tunnel 未连接时，检查 ID、密钥、网络和服务状态。Tunnel 已连
 
 没有桌面或浏览器时，直接使用命令行。GUI 和 CLI 共用配置文件与运行时，不需要 PowerShell、Bash 配置向导。
 
-### 3.1. 纯命令行安装
-
-Qt Installer Framework 支持通过 `--accept-licenses --default-answer --confirm-command install` 无界面安装。Linux 服务器可使用：
-
-```bash
-chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
-QT_QPA_PLATFORM=offscreen ./RemoteDesktopMCP-v*-linux-amd64.run --root "$HOME/RemoteDesktopMCP" --accept-licenses --default-answer --confirm-command install
-```
-
-Windows Server Core 可对下载的 `.exe` 安装器使用相同参数，并通过 `--root` 指定目录。macOS SSH 环境可先使用 `hdiutil` 挂载 `.dmg`，再对其中的安装程序使用相同参数。Windows Server Core 和 macOS SSH 的安装流程仍需实机验收，暂不视为已验证的发布能力。
-
-### 3.2. 配置与服务管理
+### 3.1. 配置与服务管理
 
 在安装目录执行：
 
@@ -83,7 +118,7 @@ Windows 使用 `bin\\remotedesktopmcp.exe`，子命令一致。交互式 `config
 
 服务能否自动恢复取决于平台和登录会话。退回普通后台进程时，重启后不会自动恢复；无需登录的系统服务还需要单独验收。
 
-### 3.3. 无桌面环境的系统服务
+### 3.2. 无桌面环境的系统服务
 
 普通 `start` 启动当前用户的后台进程；需要机器启动后自动运行时，先配置 Tunnel，再注册操作系统服务。三平台都调用同一个 Go Client 和现有 Node MCP Runtime。
 
