@@ -23,17 +23,17 @@ RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主�
 
 ## 2. Quick Start
 
-下面以第一次把电脑连接到 ChatGPT 为例，走完安装、配置、启动和验收。Windows 使用配置窗口；Linux 和 macOS 使用安装包里的终端向导，其他步骤基本一样。
+接下来从安装开始，把电脑连接到 ChatGPT，并通过一次实际的工具调用确认整个流程可用。Windows 主要通过图形界面操作，Linux 和 macOS 则使用安装包自带的终端向导。
 
 ### 2.1. 准备环境
 
-目前提供的是 Windows x64、Linux x64 和 macOS Intel 安装包。如果使用 ARM64 设备，这些安装包不能直接使用。
+准备一台可以联网的电脑，以及支持自定义 MCP Tunnel 的 ChatGPT 账号或工作区。目前安装包支持 Windows x64、Linux x64 和 macOS Intel，暂不支持 ARM64。
 
-还需要一台可以联网的电脑，以及支持自定义 MCP Tunnel 的 ChatGPT 账号或工作区。Tunnel ID 和 Runtime API Key 可以等安装好后再创建，不用提前填写配置文件。
+Tunnel ID 和 Runtime API Key 可以安装完成后再创建，不需要提前修改配置文件。
 
 ### 2.2. 下载安装
 
-首先打开 [GitHub Latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest)，根据系统下载对应的安装包：
+打开 [GitHub Latest Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest)，从 Assets 中下载对应系统的安装包：
 
 | 系统 | 安装包 |
 | --- | --- |
@@ -41,92 +41,80 @@ RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主�
 | Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
 | macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
 
-这里下载 **Assets 中的安装包**就行，不需要下载源码压缩包。
+Windows 直接运行 EXE，选择安装目录。安装结束时勾选 **Open RemoteDesktopMCP configuration**，就会打开配置窗口；以后也可以从开始菜单的 **RemoteDesktopMCP → Configure Tunnel** 进入。
 
-Windows 直接运行 EXE，选择安装目录并完成安装。最后一页可以勾选 **Open RemoteDesktopMCP configuration**，安装结束后会直接打开配置窗口。以后想修改配置，也可以从开始菜单进入 **RemoteDesktopMCP → Configure Tunnel**。
-
-macOS 打开 DMG，运行其中的安装程序。Linux 则在下载目录执行：
+macOS 打开 DMG，运行里面的安装程序。Linux 下载后，在终端进入下载目录并执行：
 
 ```bash
-chmod +x RemoteDesktopMCP-v*-linux-amd64.run
+chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 ./RemoteDesktopMCP-v*-linux-amd64.run
 ```
 
-以上命令适用于下载目录中只有一个匹配版本的情况。安装完成后记住安装目录，下一步配置 Tunnel 时还会用到。
+以上命令假设目录中只有一个匹配的安装包。安装器已经带齐运行依赖，不需要下载源码或额外执行 npm 安装命令。
 
 ### 2.3. 配置并启动 Tunnel
 
-安装完成后，我们需要让本机的 Tunnel Client 知道连接哪个 Tunnel，以及使用什么密钥进行认证。
+程序安装好了，接下来需要建立本机与 ChatGPT 之间的连接。
 
-先打开 [OpenAI Tunnel 设置](https://platform.openai.com/settings/organization/tunnels)，创建一个 Tunnel，拿到 **Tunnel ID**；再到 [API Keys](https://platform.openai.com/settings/organization/api-keys) 创建 **Runtime API Key**。
+先从 [OpenAI Tunnel 设置](https://platform.openai.com/settings/organization/tunnels)创建 Tunnel，取得 **Tunnel ID**；再到 [API Keys](https://platform.openai.com/settings/organization/api-keys) 创建 **Runtime API Key**。两者分别用于标识连接和验证本机客户端。
 
-以 Windows 为例，打开刚才的 **Configure Tunnel** 窗口：
+Windows 打开 **Configure Tunnel** 后，按顺序操作：
 
-1. 填入 Tunnel ID 和 Runtime API Key，点击 **Save**。这一步只保存配置，不会启动服务。
-2. 点击 **Start Service**。服务启动后，按钮会切换为 **Stop Service**。
-3. 点击 **Refresh Status**，确认状态显示 **Local Tunnel: Connected**。
+1. 填入 Tunnel ID 和 Runtime API Key，点击 **Save**，把配置保存到本机。
+2. 点击 **Start Service**，启动 Tunnel 服务。
+3. 点击 **Refresh Status**，确认状态为 **Local Tunnel: Connected**。
 
-这样本地 Tunnel 就启动好了。以后重新打开配置窗口，已经保存的 Runtime API Key 会显示为掩码，不需要每次都重新输入。
+这里把 Save 和 Start 分开，是为了以后修改配置时不会中断正在运行的服务。重新打开窗口时，已保存的密钥会以掩码显示，不需要再次输入。
 
-Linux 和 macOS 的配置方式略有不同。在安装目录的终端中执行：
+Linux 和 macOS 在安装目录运行：
 
 ```bash
 ./Configure-RemoteDesktop.sh
 ```
 
-macOS 也可以打开 `Configure-RemoteDesktop.command`。按照终端提示填写 Tunnel ID 和密钥即可，向导会保存配置并启动本机服务。
+macOS 也可以直接打开 `Configure-RemoteDesktop.command`。按照提示填写 Tunnel ID 和密钥，向导会完成保存与启动。
 
 ### 2.4. 在 ChatGPT 中验收
 
-现在本地 Tunnel 已经连接，但 ChatGPT 还不知道应该使用哪个 MCP 服务，所以还需要完成一次插件注册。
+本机显示 Connected，说明 Tunnel 已连接。最后还需要告诉 ChatGPT 使用哪个 MCP 插件。
 
-打开 [ChatGPT Plugins](https://chatgpt.com/plugins)，添加自定义 MCP 服务，连接方式选择 **Tunnel**，然后选择或填写刚才创建的 Tunnel ID，按页面提示完成授权。界面名称可能随版本变化，可以对照 [OpenAI 的接入说明](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
+打开 [ChatGPT Plugins](https://chatgpt.com/plugins)，添加自定义 MCP 服务，选择 **Tunnel** 并关联刚才的 Tunnel ID，完成授权。具体入口如果有变化，可以参考 [OpenAI 接入说明](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt)。
 
-注册好后，回到 ChatGPT 对话，选择这个插件，先做一个不会修改电脑内容的测试，例如：
+随后在 ChatGPT 对话中选择该插件，尝试调用一次只读的 `list_sessions`。只要工具能够正常返回，就说明 ChatGPT 已经可以访问本机 MCP。新安装的环境可能返回空会话列表，这是正常的。
 
-> 调用 RemoteDesktopMCP 的 `list_sessions`，只读取当前会话，不要修改文件。
-
-如果工具能够正常返回，说明 ChatGPT → Tunnel → 本机 MCP 这条链路已经通了。刚安装的电脑可能没有会话，返回空列表也没关系；关键是工具调用成功，而不是会话数量。
-
-到这里就可以正常使用了。之后需要远程调用时，电脑和本地服务要保持运行。
+之后使用时，保持电脑和 Tunnel 服务运行即可。
 
 ### 2.5. 常见问题
 
-**本地一直没有连接成功。** 先核对 Tunnel ID、Runtime API Key 和网络，再点击 **Refresh Status**。仍然失败的话，查看本地日志定位原因；不要把密钥或完整的私人日志贴到公开 Issue 中。
+**Tunnel 一直没有连接成功。** 检查 Tunnel ID、密钥和网络，再刷新状态。仍然失败可以查看本地日志，但不要公开密钥。
 
-**本地显示 Connected，但 ChatGPT 调不到工具。** 这通常不是同一个问题。Connected 说明本机 Tunnel 已就绪，还要检查 ChatGPT 是否注册了同一个 Tunnel、是否完成授权，以及当前对话是否选中了插件。
+**本机 Connected，ChatGPT 却调用不了工具。** 检查插件有没有注册成功、Tunnel ID 是否一致，以及当前对话是否选中了该插件。这和本机连接成功是两个不同的环节。
 
-**改了配置，为什么还是原来的连接？** 因为 **Save** 只负责保存，不会打断正在运行的服务。需要让新配置生效时，先点击 **Stop Service**，再点击 **Start Service**。
+**修改了配置，仍然使用旧连接。** Save 只负责保存。要让新配置生效，依次点击 **Stop Service → Start Service**。
 
-**操作的怎么是 WSL 或另一台电脑？** 检查 ChatGPT 连接的 Tunnel ID 和实际运行服务的电脑。Windows 原生安装不依赖 WSL，也不要同时用相同的 Tunnel ID 启动两个实例。
-
-仍然无法解决，可以到 [Issues](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) 描述复现步骤和脱敏后的错误信息。
+如果工具操作到了 WSL 或另一台电脑，检查实际注册的 Tunnel 和运行服务的设备，不要同时使用同一个 Tunnel ID 启动多个实例。问题仍然存在，可以在 [Issues](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) 提供脱敏后的复现信息。
 
 ## 3. Configuration
 
-Windows 安装后主要在 **Configure Tunnel** 窗口管理配置和服务。开始菜单里可以找到这个入口，也可以直接运行安装目录下的 `bin/RemoteDesktopMCP-Configure.exe`。
+Windows 的配置窗口除了首次接入，也负责日常的服务管理。各个按钮的用途如下：
 
-各个操作的区别如下：
-
-| 操作 | 说明 |
+| 操作 | 作用 |
 | --- | --- |
-| **Save** | 校验并保存 Tunnel ID、Runtime API Key，不改变当前服务状态 |
-| **Start Service / Stop Service** | 使用保存的配置启动服务，或停止正在运行的服务 |
-| **Refresh Status** | 重新读取服务状态，不修改配置 |
-| **Auto-start at Windows sign-in** | 控制当前用户登录 Windows 后是否自动启动；切换开关不会停止当前连接 |
+| **Save** | 保存 Tunnel ID 和密钥，不改变服务状态 |
+| **Start Service / Stop Service** | 启动或停止本机服务 |
+| **Refresh Status** | 只读取最新状态 |
+| **Auto-start at Windows sign-in** | 控制当前用户登录后是否自动启动，不影响当前连接 |
 | **Open ChatGPT Plugins** | 打开 [ChatGPT 插件页面](https://chatgpt.com/plugins) |
 
-日常使用中，只改配置时点击 Save 就够了；如果服务已经启动，修改后的配置要等下次启动才会生效，因此可以按照 **Save → Stop Service → Start Service** 的顺序操作。
+比如需要更换 Tunnel ID，可以先修改并 Save；如果服务正在运行，再 Stop、Start 一次即可。自动启动是独立设置，关闭它不会马上停止服务。
 
-配置文件保存在安装目录的 `config.toml` 和 `runtime/` 中，后者还包含认证信息。需要迁移或卸载时，建议先停止服务并备份这两个位置。
-
-Windows 的安装维护入口是开始菜单中的 **RemoteDesktopMCP → Manage RemoteDesktopMCP**，可以从这里进入修改配置或卸载。
+配置保存在安装目录下的 `config.toml` 和 `runtime/`，包含本机认证信息。迁移或卸载前先停止服务，并备份这些文件。Windows 可以从开始菜单的 **RemoteDesktopMCP → Manage RemoteDesktopMCP** 进入维护和卸载界面。
 
 ## 4. Optional Features
 
 ### 4.1. Case 1：通过命令行管理服务
 
-Linux 和 macOS 没有 Windows 的三按钮配置窗口。如果不想再次运行配置向导，可以直接在安装目录使用下面的命令查看、停止或启动服务：
+Linux 和 macOS 可以在安装目录使用内置 Node.js 管理服务，不需要重新执行配置向导：
 
 ```bash
 # 查看状态
@@ -139,15 +127,15 @@ Linux 和 macOS 没有 Windows 的三按钮配置窗口。如果不想再次运�
 ./bin/node ./scripts/runtime.mjs start
 ```
 
-按需要执行对应的命令即可。如果是修改 Tunnel ID 或密钥，则重新运行 `./Configure-RemoteDesktop.sh`；macOS 也可以使用 `./Configure-RemoteDesktop.command`。与 Windows 的 Save 不同，这个终端向导会在保存配置后启动服务。
+按需要执行其中一条即可。修改 Tunnel ID 或密钥时，重新运行 `./Configure-RemoteDesktop.sh`；macOS 也可以使用 `./Configure-RemoteDesktop.command`。
 
-不同系统的后台运行方式也不一样：Windows 登录自启动使用用户计划任务；macOS 使用 LaunchAgent；Linux 优先使用用户级 systemd，无法使用时退回普通后台进程。Linux 的后台回退模式不保证注销或重启后自动恢复。
+后台服务由当前用户管理：Windows 的登录自启动使用计划任务，macOS 使用 LaunchAgent，Linux 优先使用用户级 systemd。Linux 在没有 systemd 时会退回普通后台进程，注销或重启后需要手动启动。
 
-### 4.2. Case 2：连接本地 MCP 客户端
+### 4.2. Case 2：接入本地 MCP 客户端
 
-如果只是想把 RemoteDesktopMCP 接入同一台电脑上的其他 MCP 客户端，可以直接使用 stdio 模式。这种情况不需要创建 Tunnel，也不需要 Runtime API Key。
+除了连接网页版 ChatGPT，本项目也保留了本地 stdio 接入方式。使用支持 stdio 的 MCP 客户端时，可以直接启动 `scripts/proxy.mjs`，不需要配置 Tunnel。
 
-先按照 [Development](#5-development) 安装源码依赖，再将客户端的 MCP 配置指向 `scripts/proxy.mjs`：
+先按 [Development](#5-development) 准备源码和依赖，再在客户端中配置：
 
 ```json
 {
@@ -160,13 +148,11 @@ Linux 和 macOS 没有 Windows 的三按钮配置窗口。如果不想再次运�
 }
 ```
 
-这里的路径要换成源码在你电脑上的实际绝对路径。保存客户端配置并重新连接后，同样可以用 `list_sessions` 做一次只读验收。
-
-注意这与前面的 ChatGPT Tunnel 是两种接入方式，本地 stdio 能调用成功，并不表示 ChatGPT Tunnel 也已连接。
+将示例路径替换成实际的绝对路径，重新连接客户端后，可同样调用 `list_sessions` 验证。本地 stdio 与前面的 ChatGPT Tunnel 是两种独立的接入方式。
 
 ## 5. Development
 
-上面的安装包已经包含运行依赖。如果要修改源码、运行测试或参与开发，则需要 Git，以及符合 [package.json](package.json) 要求的 Node.js 和 npm。
+如果只是使用安装包，不需要本节。需要修改源码或运行测试时，准备 Git，以及符合 [package.json](package.json) 要求的 Node.js 和 npm：
 
 ```bash
 git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
@@ -177,14 +163,14 @@ npm run smoke
 npm run audit:high
 ```
 
-其中 `check` 用于运行兼容性检查与单元测试，`smoke` 会初始化 MCP、发现工具并进行一次只读调用。Windows PowerShell 如果因执行策略无法运行 `npm`，可改用 `npm.cmd`。
+`check` 运行单元与兼容性测试，`smoke` 初始化 MCP 并做一次只读调用。Windows PowerShell 遇到脚本执行策略限制时，可以使用 `npm.cmd`。
 
-代码修改通过 PR Review 和 Squash Merge 合入。构建与发布流程可以直接参考 [安装包 CI](.github/workflows/offline-installers.yml) 和 [Release CI](.github/workflows/release.yml)。
+代码变更通过 PR Review 和 Squash Merge 合入。安装包与正式版本的构建流程分别见 [Installer CI](.github/workflows/offline-installers.yml) 和 [Release CI](.github/workflows/release.yml)。
 
 ## 6. License
 
-项目原创代码使用 [Apache-2.0](LICENSE)，第三方依赖及其许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+原创代码使用 [Apache-2.0](LICENSE)，第三方依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-RemoteDesktopMCP 会以当前操作系统账户的权限读写文件和执行命令，没有额外的工具级沙箱或白名单。因此，接入前需要确认账户权限及 ChatGPT 插件授权范围，不建议让它以管理员账户长期运行。MCP 请求与执行结果也可能传输给连接的 AI 服务。
+RemoteDesktopMCP 以运行它的操作系统账户权限读写文件和执行命令，不额外提供工具沙箱。使用时应控制账户和插件的权限范围。MCP 请求与结果可能发送给连接的 AI 服务；`config.toml`、`runtime/`、密钥和日志不要公开或提交到 Git。
 
-`config.toml`、`runtime/`、密钥和日志都属于本机私有数据，不要提交到 GitHub。如发现安全问题，可以通过 [GitHub Security Advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories) 私下报告。
+如果发现安全问题，可以通过 [GitHub Security Advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories) 私下报告。

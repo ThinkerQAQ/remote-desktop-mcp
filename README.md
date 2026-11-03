@@ -23,115 +23,101 @@ The project also provides installers, configuration, and service management for 
 
 ## 2. Quick Start
 
-This walkthrough starts with a computer that has not been connected to ChatGPT before. We will install the application, start its Tunnel, register it in ChatGPT, and test one read-only tool call.
-
-Windows uses a configuration window. Linux and macOS use a terminal setup wizard included in the installer.
+We'll install RemoteDesktopMCP, connect the computer to ChatGPT, and confirm that a real tool call works. Windows uses a configuration window; Linux and macOS use a terminal wizard included with the installer.
 
 ### 2.1. Requirements
 
-The available installers target Windows x64, Linux x64, and Intel-based macOS. They do not run on ARM64 systems.
+You need an internet connection and a ChatGPT account or workspace that supports custom MCP Tunnel connections. Installers are available for Windows x64, Linux x64, and Intel-based macOS; ARM64 is not currently supported.
 
-You also need internet access and a ChatGPT account or workspace that supports custom MCP Tunnel connections. You can create the Tunnel ID and runtime API key after installing the application; there is no configuration file to edit beforehand.
+You can create the Tunnel ID and Runtime API Key after installation. There is no configuration file to edit first.
 
 ### 2.2. Download and install
 
-Start with the [latest GitHub Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest). Download the installer for your system from **Assets**:
+Open the [latest GitHub Release](https://github.com/ThinkerQAQ/remote-desktop-mcp/releases/latest) and download the appropriate installer from Assets:
 
-| System | Installer |
+| Platform | Installer |
 | --- | --- |
 | Windows x64 | `RemoteDesktopMCP-v*-windows-amd64.exe` |
 | Linux x64 | `RemoteDesktopMCP-v*-linux-amd64.run` |
 | macOS Intel | `RemoteDesktopMCP-v*-darwin-amd64.dmg` |
 
-Use the installer rather than a source-code archive.
+On Windows, run the EXE and choose an installation directory. Leave **Open RemoteDesktopMCP configuration** checked on the final page to open the configuration window. You can reopen it later from **Start Menu → RemoteDesktopMCP → Configure Tunnel**.
 
-On **Windows**, run the EXE, choose an installation directory, and complete the setup. The final page offers **Open RemoteDesktopMCP configuration**; leave it selected to open the configuration window immediately. Later, the same window is available under **Start Menu → RemoteDesktopMCP → Configure Tunnel**.
-
-On **macOS**, open the DMG and run the installer inside it. On **Linux**, open a terminal in the download directory and run:
+On macOS, open the DMG and run the installer inside. On Linux, open a terminal in the download directory:
 
 ```bash
-chmod +x RemoteDesktopMCP-v*-linux-amd64.run
+chmod +x ./RemoteDesktopMCP-v*-linux-amd64.run
 ./RemoteDesktopMCP-v*-linux-amd64.run
 ```
 
-These commands assume the directory contains only one matching installer version. Keep track of the installation directory; you will use it in the next step.
+The Linux commands assume there is only one matching installer in the directory. All installers include the runtime and dependencies, so you don't need a source archive or a separate npm installation.
 
 ### 2.3. Configure and start the Tunnel
 
-The local Tunnel Client needs two things: which Tunnel to connect to and the key it should use for authentication.
+With the application installed, we need a connection between the computer and ChatGPT.
 
-Open [OpenAI Tunnel settings](https://platform.openai.com/settings/organization/tunnels), create a Tunnel, and copy its **Tunnel ID**. Then create a **Runtime API Key** from [API Keys](https://platform.openai.com/settings/organization/api-keys).
+Create a Tunnel in [OpenAI Tunnel settings](https://platform.openai.com/settings/organization/tunnels) and copy its **Tunnel ID**. Then create a **Runtime API Key** under [API Keys](https://platform.openai.com/settings/organization/api-keys). The ID identifies the connection; the key authenticates the local client.
 
-On **Windows**, open the **Configure Tunnel** window you installed in the previous step:
+On Windows, open **Configure Tunnel** and follow these steps:
 
-1. Enter the Tunnel ID and Runtime API Key, then click **Save**. This saves the settings; it does not start the service.
-2. Click **Start Service**. Once the service is running, the button changes to **Stop Service**.
+1. Enter the Tunnel ID and Runtime API Key, then click **Save**.
+2. Click **Start Service** to start the local Tunnel service.
 3. Click **Refresh Status** and check for **Local Tunnel: Connected**.
 
-The local Tunnel is now running. If you reopen the window later, the saved API key appears as a password mask, so you do not need to paste it every time.
+Save is separate from Start so changing configuration later won't interrupt a running service. A saved key appears masked when you reopen the window.
 
-On **Linux or macOS**, open a terminal in the installation directory and run:
+On Linux and macOS, run this command from the installation directory:
 
 ```bash
 ./Configure-RemoteDesktop.sh
 ```
 
-On macOS, you can also open `Configure-RemoteDesktop.command` to start the wizard in Terminal. Enter the Tunnel ID and key when prompted; the wizard saves the settings and starts the user-level service.
+You can also open `Configure-RemoteDesktop.command` on macOS. Follow the prompts to save the Tunnel ID and key; the wizard also starts the service.
 
 ### 2.4. Verify the connection in ChatGPT
 
-The local Tunnel is connected, but ChatGPT still needs to know which MCP service to use.
+The local Tunnel is connected. One more step tells ChatGPT which MCP plugin to use.
 
-Open [ChatGPT Plugins](https://chatgpt.com/plugins), add a custom MCP server, choose **Tunnel** as the connection type, and select or enter the Tunnel ID you just created. Complete the authorization steps. The interface may change over time; see the [OpenAI connection guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) if the labels differ.
+Open [ChatGPT Plugins](https://chatgpt.com/plugins), add a custom MCP server, choose **Tunnel**, and register the same Tunnel ID. Complete the authorization steps. If the interface has changed, refer to the [OpenAI connection guide](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt).
 
-Then open a ChatGPT conversation, select the plugin, and try a read-only request:
+Select the plugin in a ChatGPT conversation and make a read-only `list_sessions` call. If the tool succeeds, ChatGPT can reach the local MCP. An empty session list is normal for a new installation.
 
-> Call RemoteDesktopMCP's `list_sessions` tool. Only read the current sessions; do not modify any files.
-
-If the tool returns successfully, ChatGPT can reach your computer through the Tunnel. An empty session list is normal on a fresh installation: what matters is that the tool call worked.
-
-That completes the setup. Keep your computer and the local service running whenever you want ChatGPT to use the tools.
+Keep the computer and Tunnel service running when you need to use it.
 
 ### 2.5. Troubleshooting
 
-**The local Tunnel does not connect.** Check the Tunnel ID, Runtime API Key, and network connection, then use **Refresh Status**. If it still fails, inspect the local log without posting credentials or private log contents to a public issue.
+**The Tunnel does not connect.** Check the Tunnel ID, key, and network connection, then refresh status. Inspect local logs if needed, but don't post credentials publicly.
 
-**The window says Connected, but ChatGPT cannot call the tools.** These are two separate stages. Connected tells you the local Tunnel is ready; check whether ChatGPT has registered the same Tunnel ID, completed authorization, and selected the plugin for the conversation.
+**The window says Connected, but ChatGPT can't use the tools.** Check plugin registration, the Tunnel ID, and whether the plugin is selected in the current conversation. Local connectivity and ChatGPT registration are separate steps.
 
-**I saved a new configuration, but the previous connection is still active.** This is expected. **Save** does not interrupt a running service. Use **Stop Service**, then **Start Service** to apply the saved settings.
+**A configuration change hasn't taken effect.** Save does not restart the service. Click **Stop Service → Start Service** to apply the new settings.
 
-**The tools are acting on WSL or another computer.** Check which Tunnel ID the plugin is using and which computer is running the service. Native Windows installation does not need WSL. Avoid running two services with the same Tunnel ID.
-
-If you still cannot connect, [open an Issue](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) with reproduction steps and sanitized errors.
+If the tools operate on WSL or another computer, check which device owns the registered Tunnel. Avoid running multiple instances with the same Tunnel ID. For unresolved issues, open an [Issue](https://github.com/ThinkerQAQ/remote-desktop-mcp/issues) with sanitized reproduction details.
 
 ## 3. Configuration
 
-After installing on Windows, you can manage the connection from **Configure Tunnel**, available in the Start menu or at `bin/RemoteDesktopMCP-Configure.exe` in the installation directory.
+On Windows, the **Configure Tunnel** window also handles everyday service management:
 
-The controls have separate responsibilities:
-
-| Control | What it does |
+| Control | Action |
 | --- | --- |
-| **Save** | Validate and save the Tunnel ID and runtime key without changing the running service |
-| **Start Service / Stop Service** | Start the service with saved settings, or stop it |
-| **Refresh Status** | Read the current state without changing anything |
-| **Auto-start at Windows sign-in** | Enable or disable starting the service when this Windows user signs in; it does not stop an active connection |
+| **Save** | Save the Tunnel ID and key without changing the service |
+| **Start Service / Stop Service** | Start or stop the local service |
+| **Refresh Status** | Read the current service state |
+| **Auto-start at Windows sign-in** | Control startup for the current Windows user without stopping an active connection |
 | **Open ChatGPT Plugins** | Open the [ChatGPT plugin page](https://chatgpt.com/plugins) |
 
-In everyday use, clicking **Save** is enough to store new settings. When the service is already running, those settings take effect on the next start. To apply them immediately, use **Save → Stop Service → Start Service**.
+For example, to change the Tunnel ID, enter the new value and click Save. If the service is running, stop and start it once to use the new settings. Auto-start is a separate preference; turning it off won't immediately disconnect the Tunnel.
 
-The application keeps `config.toml` and `runtime/` in the installation directory. These include private configuration and credentials, so back them up before moving or uninstalling the application.
-
-On Windows, **Start Menu → RemoteDesktopMCP → Manage RemoteDesktopMCP** opens the maintenance entry point for configuration changes and uninstallation.
+Configuration is stored in `config.toml` and `runtime/` in the installation directory, including private credentials. Stop the service and back up these files before moving or uninstalling. On Windows, open **Start Menu → RemoteDesktopMCP → Manage RemoteDesktopMCP** for maintenance and uninstallation.
 
 ## 4. Optional Features
 
-### 4.1. Case 1: Manage the service from the terminal
+### 4.1. Case 1: Manage the service from a terminal
 
-Linux and macOS do not use the Windows three-button configuration window. If you only need to check or control the current service, run the appropriate command from the installation directory:
+On Linux and macOS, you can manage the installed service without rerunning the setup wizard. From the installation directory:
 
 ```bash
-# Check the service
+# Check status
 ./bin/node ./scripts/runtime.mjs status
 
 # Stop the service
@@ -141,15 +127,15 @@ Linux and macOS do not use the Windows three-button configuration window. If you
 ./bin/node ./scripts/runtime.mjs start
 ```
 
-Run the command you need; these are not three steps to execute in sequence. To change the Tunnel ID or key, rerun `./Configure-RemoteDesktop.sh` (or `./Configure-RemoteDesktop.command` on macOS). Unlike Windows **Save**, this terminal wizard also starts the service after saving.
+Run whichever command you need. To change the Tunnel ID or key, rerun `./Configure-RemoteDesktop.sh`, or `./Configure-RemoteDesktop.command` on macOS.
 
-The background process is managed differently on each system: Windows uses a per-user Scheduled Task when sign-in auto-start is enabled; macOS uses a LaunchAgent; Linux prefers user-level systemd and falls back to a regular background process. The Linux fallback does not guarantee automatic recovery after logout or reboot.
+Background services run under the current user: Windows uses a Scheduled Task for sign-in startup, macOS uses a LaunchAgent, and Linux prefers user-level systemd. Without systemd, Linux falls back to a background process that must be started manually after logout or reboot.
 
 ### 4.2. Case 2: Connect a local MCP client
 
-If your MCP client runs on the same computer, you can use the stdio transport without creating a Tunnel or obtaining a Runtime API Key.
+RemoteDesktopMCP also supports local stdio clients. In this case, you can run `scripts/proxy.mjs` directly without configuring a Tunnel.
 
-Install the source dependencies as described in [Development](#5-development). Then point your client's MCP configuration to the absolute path of `scripts/proxy.mjs`:
+First install the source dependencies in [Development](#5-development), then configure your MCP client:
 
 ```json
 {
@@ -162,13 +148,11 @@ Install the source dependencies as described in [Development](#5-development). T
 }
 ```
 
-Replace the sample path with the actual source path on your computer. Reconnect the client and make a read-only `list_sessions` call.
-
-This local stdio connection is separate from the ChatGPT Tunnel described in Quick Start. A successful stdio call does not verify that the remote Tunnel is connected.
+Replace the sample with the actual absolute path, reconnect the client, and call `list_sessions` to verify. Local stdio and the ChatGPT Tunnel are separate ways to connect.
 
 ## 5. Development
 
-The installers already contain the runtime. To edit the source or run tests, you will instead need Git, npm, and a Node.js version supported by [package.json](package.json).
+You can skip this section if you're using an installer. To work with the source, install Git, npm, and a Node.js version supported by [package.json](package.json):
 
 ```bash
 git clone https://github.com/ThinkerQAQ/remote-desktop-mcp.git
@@ -179,14 +163,14 @@ npm run smoke
 npm run audit:high
 ```
 
-`check` runs compatibility and unit tests. `smoke` initializes the MCP server, discovers its tools, and makes a read-only call. On Windows PowerShell, use `npm.cmd` if the shell blocks the `npm` script.
+`check` runs unit and compatibility tests; `smoke` initializes the MCP server and makes a read-only call. On Windows PowerShell, use `npm.cmd` if the execution policy blocks the npm shim.
 
-Changes are reviewed through pull requests and merged using Squash Merge. The native installers are built by [installer CI](.github/workflows/offline-installers.yml), and tagged releases use [Release CI](.github/workflows/release.yml).
+Changes go through pull-request review and Squash Merge. See [Installer CI](.github/workflows/offline-installers.yml) and [Release CI](.github/workflows/release.yml) for the package builds.
 
 ## 6. License
 
-Original project code is licensed under [Apache-2.0](LICENSE). Third-party dependencies and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original project code is licensed under [Apache-2.0](LICENSE). Third-party licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-RemoteDesktopMCP reads, writes, and runs commands with the permissions of the operating-system account that starts it. There is no additional tool-level sandbox or allowlist. Check the account's permissions and the ChatGPT plugin's authorization scope before connecting; avoid running the service as an administrator. MCP requests and results may also be sent to the connected AI service.
+RemoteDesktopMCP reads, writes, and runs commands using the permissions of the operating-system account that starts it; it does not add a tool-level sandbox. Use an appropriately restricted account and review plugin permissions. MCP requests and results may be sent to the connected AI service. Keep `config.toml`, `runtime/`, keys, and logs private.
 
-Keep `config.toml`, `runtime/`, API keys, and logs private; do not commit them to GitHub. Security issues can be reported privately through [GitHub Security Advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories).
+Please report security issues privately through [GitHub Security Advisories](https://github.com/ThinkerQAQ/remote-desktop-mcp/security/advisories).
