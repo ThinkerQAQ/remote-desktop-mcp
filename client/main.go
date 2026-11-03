@@ -91,6 +91,7 @@ func runNode(root, script string, env []string, args ...string) ([]byte, error) 
 	defer cancel()
 	argv := append([]string{filepath.Join(root, "scripts", script)}, args...)
 	cmd := exec.CommandContext(ctx, node(root), argv...)
+	hideWindow(cmd)
 	cmd.Dir = root
 	filtered := make([]string, 0, len(os.Environ())+len(env)+3)
 	for _, v := range os.Environ() {
@@ -114,60 +115,16 @@ func runNode(root, script string, env []string, args ...string) ([]byte, error) 
 	return out, nil
 }
 func save(root, id, key string) error {
-	if !tunnelIDPattern.MatchString(id) {
-		return errors.New("invalid Tunnel ID")
-	}
-	if strings.ContainsAny(key, "\r\n\x00") {
-		return errors.New("runtime API key must be a single line")
-	}
-	if key == "" {
-		if _, e := os.Stat(filepath.Join(root, "runtime", "credentials.json")); e != nil {
-			return errors.New("runtime API key is required for a new connection")
-		}
-	}
-	env := []string{"DV_TUNNEL_ID=" + id}
-	if key != "" {
-		env = append(env, "DV_RUNTIME_API_KEY="+key)
-	}
-	// Reuse the existing config writer and its permission checks. Save never starts or stops a service.
-	_, err := runNode(root, "setup.mjs", env, "--non-interactive", "--configure-only")
-	return err
+	return saveNative(root, id, key)
 }
 func readState(root string) state {
-	s := state{}
-	raw, e := os.ReadFile(filepath.Join(root, "runtime", "setup.json"))
-	if e == nil {
-		var saved setupState
-		if json.Unmarshal(raw, &saved) == nil {
-			s.ID = saved.ID
-			s.Manager = saved.Manager
-		}
-	}
-	if _, e := os.Stat(filepath.Join(root, "runtime", "credentials.json")); e == nil {
-		s.HasKey = true
-	}
-	out, e := runNode(root, "runtime.mjs", nil, "status")
-	if e != nil {
-		s.Error = "Runtime status unavailable"
-		return s
-	}
-	var st runtimeState
-	if json.Unmarshal(out, &st) != nil {
-		s.Error = "Invalid runtime status"
-		return s
-	}
-	s.Managed = st.Managed
-	s.Ready = st.Ready
-	s.Manager = st.Manager
-	s.Autostart = st.Autostart
-	return s
+	return nativeState(root)
 }
 func service(root, action string) error {
 	if action != "start" && action != "stop" {
 		return errors.New("invalid service action")
 	}
-	_, e := runNode(root, "runtime.mjs", nil, action)
-	return e
+	return controlNative(root, action)
 }
 func sessionToken() string {
 	b := make([]byte, 32)
@@ -319,6 +276,70 @@ func main() {
 	switch action {
 	case "--self-test":
 		fmt.Println("CLIENT_SELF_TEST_PASS")
+	case "serve-worker":
+		if e = launchRuntime(root); e != nil {
+			log.Fatal(e)
+		}
+	case "serve-service":
+		if e = serveNative(root); e != nil {
+			log.Fatal(e)
+		}
+	case "protect-path":
+		if len(args) != 2 || (args[1] != "dir" && args[1] != "file") {
+			log.Fatal("invalid permission helper")
+		}
+		if e = protectPrivate(args[0], args[1] == "dir"); e != nil {
+			log.Fatal("could not restrict private permissions")
+		}
+	case "service":
+		f := flag.NewFlagSet("service", flag.ExitOnError)
+		scope := f.String("scope", "user", "user or system scope")
+		account := f.String("user", "", "restricted service account")
+		fromStdin := f.Bool("password-stdin", false, "Read Windows account password from stdin")
+		_ = f.Parse(args)
+		ops := f.Args()
+		if len(ops) != 1 {
+			log.Fatal("Use service install|uninstall|status")
+		}
+		switch ops[0] {
+		case "install":
+			password := ""
+			if runtime.GOOS == "windows" {
+				if *account == "" {
+					log.Fatal("Windows service requires a restricted --user account")
+				}
+				if *fromStdin {
+					b, err := io.ReadAll(io.LimitReader(os.Stdin, 4097))
+					if err != nil {
+						log.Fatal("Cannot read password")
+					}
+					password = strings.TrimRight(string(b), "\r\n")
+				} else if term.IsTerminal(int(os.Stdin.Fd())) {
+					fmt.Fprint(os.Stderr, "Service account password: ")
+					b, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Fprintln(os.Stderr)
+					if err != nil {
+						log.Fatal("Cannot read hidden password")
+					}
+					password = string(b)
+				} else {
+					log.Fatal("Windows service password requires a TTY or --password-stdin")
+				}
+			}
+			if e = installNativeService(root, *account, *scope, password); e != nil {
+				log.Fatal(e)
+			}
+			fmt.Println("Native service installed")
+		case "uninstall":
+			if e = terminateNative(root); e != nil {
+				log.Fatal(e)
+			}
+			fmt.Println("Native service uninstalled")
+		case "status":
+			_ = json.NewEncoder(os.Stdout).Encode(nativeState(root))
+		default:
+			log.Fatal("Use service install|uninstall|status")
+		}
 	case "gui":
 		if e = webGUI(root); e != nil {
 			log.Fatal(e)
@@ -377,7 +398,7 @@ func main() {
 		}
 		fmt.Println("Configuration saved; service state unchanged")
 	default:
-		fmt.Fprintln(os.Stderr, "Usage: remotedesktopmcp [gui|configure [--id ID] [--api-key-stdin]|start|stop|status]")
+		fmt.Fprintln(os.Stderr, "Usage: remotedesktopmcp [gui|configure|start|stop|status|service]")
 		os.Exit(2)
 	}
 }

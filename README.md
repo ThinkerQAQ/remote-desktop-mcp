@@ -83,6 +83,33 @@ On Windows, the executable is `bin\\remotedesktopmcp.exe`; the subcommands are t
 
 Service startup depends on the platform and available login/session manager. A fallback background process does not automatically survive a reboot. Native system services without an interactive login still require separate acceptance testing.
 
+### 3.3. Native services without a desktop
+
+Manual `start` uses a user-owned background process. For restart-on-boot, register an OS-managed service after configuring the Tunnel. The service runs the same Go client and Node MCP worker.
+
+Linux or macOS user session:
+
+```bash
+./bin/remotedesktopmcp service --scope user install
+./bin/remotedesktopmcp start
+```
+
+An SSH-only macOS host should use a **system** launchd service under an unprivileged account rather than depending on a GUI Login Session. On Linux servers, systemd can also use a system service:
+
+```bash
+sudo ./bin/remotedesktopmcp service --scope system --user YOUR_OS_USER install
+./bin/remotedesktopmcp start
+```
+
+On Windows Server Core, first configure the Tunnel under the same restricted OS account that will run the service. In an elevated terminal, register the Windows Service using that account (password entered privately through the terminal):
+
+```powershell
+.\bin\remotedesktopmcp.exe service --scope system --user "DOMAIN\restricted-user" install
+.\bin\remotedesktopmcp.exe start
+```
+
+Use `stop` and `service uninstall` for explicit shutdown and removal. System service installation requires the appropriate OS permissions; the specified service account must have access to the installation directory and private runtime data. The project refuses implicit LocalSystem registration. Old scheduled tasks and launch agents must be removed before migrating an existing installation.
+
 ## 4. Optional Features
 
 ### 4.1. Connect a local MCP client

@@ -7,6 +7,15 @@ const securedDirs = new Set();
 export function restrict(file, directory = false) {
   if (directory && securedDirs.has(file)) return;
   if (process.platform !== 'win32') { fs.chmodSync(file, directory ? 0o700 : 0o600); return; }
+  // Go clients use native Windows ACLs, without PowerShell.
+  // The legacy fallback remains for pre-migration installations only.
+  if (process.env.DV_ACL_HELPER) {
+    const p = spawnSync(process.env.DV_ACL_HELPER, ['protect-path', file, directory ? 'dir' : 'file'],
+      { encoding: 'utf8', timeout: 20000, windowsHide: true, stdio: 'pipe' });
+    if (p.status !== 0) throw new Error('Native private-file permission helper failed');
+    if (directory) securedDirs.add(file);
+    return;
+  }
   // Edit the existing descriptor: constructing a new descriptor and resetting owner
   // can require SeRestorePrivilege even for a file created by the current user.
   // Keep compliant ACLs unchanged: redundant Set-Acl can require SeSecurityPrivilege.

@@ -83,6 +83,33 @@ Windows 使用 `bin\\remotedesktopmcp.exe`，子命令一致。交互式 `config
 
 服务能否自动恢复取决于平台和登录会话。退回普通后台进程时，重启后不会自动恢复；无需登录的系统服务还需要单独验收。
 
+### 3.3. 无桌面环境的系统服务
+
+普通 `start` 启动当前用户的后台进程；需要机器启动后自动运行时，先配置 Tunnel，再注册操作系统服务。三平台都调用同一个 Go Client 和现有 Node MCP Runtime。
+
+Linux / macOS 的用户会话服务：
+
+```bash
+./bin/remotedesktopmcp service --scope user install
+./bin/remotedesktopmcp start
+```
+
+只有 SSH 的 macOS 应使用 **system** 级 launchd 服务，并指定低权限账号，不能依赖图形登录会话。Linux Server 也可注册系统级 systemd 服务：
+
+```bash
+sudo ./bin/remotedesktopmcp service --scope system --user YOUR_OS_USER install
+./bin/remotedesktopmcp start
+```
+
+Windows Server Core：先以准备运行服务的低权限账号配置 Tunnel，再使用具备管理权限的终端注册 Windows Service。密码通过终端隐藏输入：
+
+```powershell
+.\bin\remotedesktopmcp.exe service --scope system --user "DOMAIN\restricted-user" install
+.\bin\remotedesktopmcp.exe start
+```
+
+停止和卸载分别使用 `stop`、`service uninstall`。安装系统服务需要对应操作系统权限，服务账号必须能够访问安装目录和私有数据。程序不允许隐式以 LocalSystem 注册。升级旧版本时必须先清理原有的计划任务或 LaunchAgent，避免重复启动。
+
 ## 4. Optional Features
 
 ### 4.1. 连接本地 MCP 客户端
