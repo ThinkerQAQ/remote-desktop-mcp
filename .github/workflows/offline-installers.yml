@@ -41,6 +41,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client/go.mod
+          cache-dependency-path: client/go.sum
+      - name: Test cross-platform Go client
+        shell: bash
+        run: |
+          cd client
+          go test ./...
+          go vet ./...
       - run: npm ci --no-audit --no-fund
       - run: npm run check
       - run: npm run smoke
@@ -53,6 +63,18 @@ jobs:
           tools: tools_ifw
       - name: Build fully bundled payload from verified releases
         run: python packaging/stage_runtime.py --platform ${{ matrix.target }} --arch ${{ matrix.arch }} --output dist/stage
+      - name: Verify headless Go client without a display
+        shell: bash
+        run: |
+          set -e
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            client="dist/stage/bin/remotedesktopmcp.exe"
+          else
+            client="dist/stage/bin/remotedesktopmcp"
+          fi
+          env -u DISPLAY -u WAYLAND_DISPLAY "$client" --self-test
+          env -u DISPLAY -u WAYLAND_DISPLAY "$client" status
+
       - name: Confirm bundled MCP works without system Node
         shell: bash
         run: |
@@ -70,12 +92,6 @@ jobs:
             $process = Start-Process -FilePath (Resolve-Path $entry).Path -ArgumentList "--self-test" -Wait -PassThru
             if ($process.ExitCode -ne 0) { throw "Native GUI selftest failed ($($process.ExitCode)): $entry" }
           }
-      - name: Verify Windows first-run GUI works without terminal TTY
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          & powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "dist/stage/Configure-RemoteDesktop.ps1" -SelfTest
-          if ($LASTEXITCODE -ne 0) { throw 'Windows configuration GUI self test failed' }
       - name: Build native offline Qt installer
         shell: bash
         run: |
@@ -84,6 +100,43 @@ jobs:
             --platform "${{ matrix.target }}" --stage dist/stage \
             --version "$version" \
             --output "dist/RemoteDesktopMCP-v${version}-${{ matrix.target }}-${{ matrix.arch }}.${{ matrix.extension }}"
+      - name: Test Linux installer with no graphical display
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer=$(find dist -maxdepth 1 -name 'RemoteDesktopMCP-v*-linux-amd64.run' -print -quit)
+          chmod +x "$installer"
+          env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen "$installer" --root "$RUNNER_TEMP/dv-headless" --accept-licenses --default-answer --confirm-command install
+          test -x "$RUNNER_TEMP/dv-headless/bin/remotedesktopmcp"
+          "$RUNNER_TEMP/dv-headless/bin/remotedesktopmcp" --self-test
+      - name: Test Windows installer in CLI mode
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = (Get-ChildItem dist/RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
+          $root = Join-Path $env:RUNNER_TEMP 'dv-headless-windows'
+          & $installer --root $root --accept-licenses --default-answer --confirm-command install
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI install failed' }
+          & (Join-Path $root 'bin/remotedesktopmcp.exe') --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Windows CLI client missing' }
+      - name: Test macOS DMG installation over CLI without a login GUI
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg=$(find dist -maxdepth 1 -name 'RemoteDesktopMCP-v*-darwin-amd64.dmg' -print -quit)
+          mountpoint="$RUNNER_TEMP/dv-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint" || true' EXIT
+          app=$(find "$mountpoint" -maxdepth 1 -name '*.app' -print -quit)
+          test -n "$app"
+          installer=$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit)
+          test -n "$installer"
+          env -u DISPLAY -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen "$installer" --root "$RUNNER_TEMP/dv-headless-macos" --accept-licenses --default-answer --confirm-command install
+          test -x "$RUNNER_TEMP/dv-headless-macos/bin/remotedesktopmcp"
+          "$RUNNER_TEMP/dv-headless-macos/bin/remotedesktopmcp" --self-test
       - name: Verify Windows installer does not open a console
         if: runner.os == 'Windows'
         shell: pwsh
