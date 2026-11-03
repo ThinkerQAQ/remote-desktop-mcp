@@ -10,6 +10,9 @@ This repository contains original integration code. It does not vendor Desktop C
 | @modelcontextprotocol/sdk 1.32.2 | MIT | Read-only smoke client |
 | smol-toml 1.9.1 | BSD-3-Clause | TOML parser |
 | zod 4.6.7 | MIT | Schema compatibility dependency |
+| golang.org/x/term v0.32.0 | BSD-3-Clause | Cross-platform hidden terminal input in the Go client |
+| golang.org/x/sys v0.33.0 | BSD-3-Clause | Platform system calls for Go terminal support |
+| github.com/kardianos/service v1.2.3 | zlib | Native Windows Service, macOS launchd, and Linux systemd integration |
 | openai/tunnel-client (separate install; tested 0.0.16) | Apache-2.0 | Persistent remote transport |
 
 Desktop Commander attribution: Copyright (c) 2024–2025 Eduard Ruzga and Desktop Commander Contributors. Project names and marks belong to their respective owners. See installed dependency LICENSE files for full terms and transitive dependency licenses.

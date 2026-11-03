@@ -21,7 +21,9 @@ test('Zod 4 preserves schemas, defaults, records, refinements and PDF preprocess
 });
 
 test('native manager definitions escape paths and never embed credentials', () => {
-  assert.equal(defaultManager('darwin'), 'launchd'); assert.equal(defaultManager('win32'), 'scheduled-task');
+  // SSH-only macOS hosts may lack a GUI launchd domain and use background mode.
+  assert.ok(['launchd', 'background'].includes(defaultManager('darwin')));
+  assert.equal(defaultManager('win32'), 'scheduled-task');
   assert.equal(xml('a&<"'), 'a&amp;&lt;&quot;'); assert.equal(psQuote("a'b"), "'a''b'");
   assert.ok(launchPlist().includes('<key>ProgramArguments</key>'));
   assert.ok(taskScript('start').includes('-RunLevel Limited'));

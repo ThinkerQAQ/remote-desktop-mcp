@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -80,9 +81,6 @@ def copy_app(source: Path, target: Path) -> None:
     # platform-dependent symlinks. All actual runtime packages are retained.
     shutil.copytree(source / "node_modules", target / "node_modules",
                     ignore=shutil.ignore_patterns(".bin"))
-    for asset in ("Configure-RemoteDesktop.ps1", "Configure-RemoteDesktop.sh"):
-        shutil.copy2(ROOT / "packaging/assets" / asset, target / asset)
-    (target / "Configure-RemoteDesktop.sh").chmod(0o755)
     brand = target / "brand"
     brand.mkdir()
     shutil.copy2(ROOT / "packaging/assets/remotedesktopmcp.ico", brand / "remotedesktopmcp.ico")
@@ -97,6 +95,8 @@ def build_windows_launchers(target: Path) -> None:
     if not csc.is_file():
         raise FileNotFoundError(f"Windows .NET Framework C# compiler required for GUI launcher: {csc}")
     icon = target / "brand/remotedesktopmcp.ico"
+    # These icon-branded native windows are launchers only; the Go client owns
+    # all configuration, GUI, CLI, and service-management behavior.
     for name, switch in (("RemoteDesktopMCP-Configure", "CONFIGURE"), ("RemoteDesktopMCP-Maintenance", "MAINTENANCE")):
         source = ROOT / "packaging/assets" / (
             "RemoteDesktopMCP-Configure.cs" if switch == "CONFIGURE" else "RemoteDesktopMCP-Launcher.cs")
@@ -107,6 +107,28 @@ def build_windows_launchers(target: Path) -> None:
             f"/win32icon:{icon}", f"/out:{output}", str(source)
         ], check=True)
 
+
+def build_client(stage: Path, platform: str, arch: str) -> None:
+    """Compile a single Go client source for GUI and headless CLI entrypoints."""
+    env = dict(os.environ)
+    env.update(GOOS=platform, GOARCH=arch, CGO_ENABLED="0")
+    executable = ".exe" if platform == "windows" else ""
+    target = stage / "bin" / ("remotedesktopmcp" + executable)
+    subprocess.run(["go", "build", "-trimpath", "-o", str(target), "."],
+                   check=True, cwd=ROOT / "client", env=env)
+    target.chmod(0o755)
+    # Compiled Go dependencies must carry their redistribution licenses.
+    for module, filename in (("golang.org/x/term", "Go-term-LICENSE.txt"),
+                             ("golang.org/x/sys", "Go-sys-LICENSE.txt"),
+                             ("github.com/kardianos/service", "Go-service-LICENSE.txt")):
+        metadata = json.loads(subprocess.check_output(
+            ["go", "list", "-m", "-json", module], cwd=ROOT / "client", env=env, text=True))
+        license_file = Path(metadata["Dir"]) / "LICENSE"
+        if not license_file.is_file():
+            raise FileNotFoundError(f"Missing Go module license: {module}")
+        # Go module cache files are read-only on Windows. Avoid propagating that
+        # attribute into cross-volume staging and installer payloads.
+        shutil.copyfile(license_file, stage / "third_party" / filename)
 
 def build(platform: str, arch: str, dest: Path, source: Path = ROOT) -> None:
     if dest.exists():
@@ -120,12 +142,16 @@ def build(platform: str, arch: str, dest: Path, source: Path = ROOT) -> None:
     tunnel_filename = f"tunnel-client-{TUNNEL_VERSION}-{platform}-{arch}.zip"
     tunnel_license = f"tunnel-client-{TUNNEL_VERSION}-{platform}-{arch}-licenses.txt"
     tunnel_base = f"https://github.com/openai/tunnel-client/releases/download/{TUNNEL_VERSION}"
-    with tempfile.TemporaryDirectory(prefix="remote-desktop-stage-") as temporary:
+    # Keep staging on the destination filesystem, including GitHub Windows
+    # runners where TEMP is on C: and the checkout lives on D:.
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="remote-desktop-stage-", dir=dest.parent) as temporary:
         stage = Path(temporary) / "payload"
         stage.mkdir()
         (stage / "bin").mkdir()
         (stage / "third_party").mkdir()
         copy_app(source, stage)
+        build_client(stage, platform, arch)
         if platform == "windows":
             build_windows_launchers(stage)
         node_archive = verified_download(node_base, node_filename, "SHASUMS256.txt")

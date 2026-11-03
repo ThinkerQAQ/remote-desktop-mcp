@@ -10,3 +10,9 @@ runtime/
 *.pem
 *.key
 coverage/
+
+# Locally built Go client
+client/*.exe
+client/remotedesktopmcp
+packaging/__pycache__/
+packaging/tests/__pycache__/

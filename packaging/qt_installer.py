@@ -33,7 +33,7 @@ def check_payload(stage: Path, target: str) -> None:
                 "bin/tunnel-client.exe" if target == "windows" else "bin/tunnel-client",
                 "bin/RemoteDesktopMCP-Configure.exe" if target == "windows" else "brand/remotedesktopmcp.png",
                 "RemoteDesktopMCP-Maintenance.exe" if target == "windows" else "brand/remotedesktopmcp.ico",
-                "Configure-RemoteDesktop.ps1" if target == "windows" else "Configure-RemoteDesktop.sh")
+                "bin/remotedesktopmcp.exe" if target == "windows" else "bin/remotedesktopmcp")
     for name in required:
         if not (stage / name).exists():
             raise ValueError(f"Missing packaged dependency: {name}")
@@ -113,6 +113,7 @@ Component.prototype.createOperations = function() {
 """
     if target == "windows":
         script += """
+    if (!installer.isCommandLineInstance()) {
     component.addOperation("Mkdir", "@UserStartMenuProgramsPath@/RemoteDesktopMCP");
     component.addOperation("CreateShortcut",
         "@TargetDir@/bin/RemoteDesktopMCP-Configure.exe",
@@ -123,13 +124,14 @@ Component.prototype.createOperations = function() {
     component.addOperation("CreateShortcut",
         "@TargetDir@/RemoteDesktopMCP-Uninstaller.exe",
         "@UserStartMenuProgramsPath@/RemoteDesktopMCP/Uninstall.lnk");
+    }
 """
     elif target == "linux":
         # Avoid a dependency on desktop environment-specific menu packages.
-        desktop = 'Type=Application\nName=Configure RemoteDesktopMCP\nTerminal=true\nExec=/bin/bash "@TargetDir@/Configure-RemoteDesktop.sh"\nCategories=Development;Utility;'
-        script += f'    component.addOperation("CreateDesktopEntry", "remotedesktopmcp.desktop", {json.dumps(desktop)});\n'
+        desktop = 'Type=Application\nName=Configure RemoteDesktopMCP\nTerminal=false\nExec="@TargetDir@/bin/remotedesktopmcp" gui\nCategories=Development;Utility;'
+        script += f'    if (!installer.isCommandLineInstance()) component.addOperation("CreateDesktopEntry", "remotedesktopmcp.desktop", {json.dumps(desktop)});\n'
     else:
-        script += "    // macOS: configuration launcher is provided as a .command file.\n"
+        script += "    // macOS uses the same Go client as the command-line interface.\n"
     if target == "windows":
         script += "};\n"
     else:
@@ -148,18 +150,11 @@ Component.prototype.finishConfigure = function() {
 """
     if target == "darwin":
         script += """
-    installer.executeDetached("/usr/bin/open",
-        ["-a", "Terminal", target + "/Configure-RemoteDesktop.command"], target);
+    installer.executeDetached(target + "/bin/remotedesktopmcp", ["gui"], target);
 """
-        # Finder-run .command launches Terminal, not a hidden daemon.
-        launch = data / "Configure-RemoteDesktop.command"
-        launch.write_text('#!/bin/bash\nroot="$(cd "$(dirname "$0")" && pwd)"\nexec /bin/bash "$root/Configure-RemoteDesktop.sh"\n')
-        launch.chmod(0o755)
     elif target == "linux":
         script += """
-    installer.executeDetached("/bin/bash",
-        ["-c", 'command -v x-terminal-emulator >/dev/null && exec x-terminal-emulator -e /bin/bash "' +
-          target + '/Configure-RemoteDesktop.sh"'], target);
+    installer.executeDetached(target + "/bin/remotedesktopmcp", ["gui"], target);
 """
     if target != "windows":
         script += "};\n"
