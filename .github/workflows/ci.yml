@@ -34,6 +34,17 @@ jobs:
             if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
           }
           if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
+      - uses: actions/setup-go@v5
+        if: runner.os == 'Windows'
+        with:
+          go-version-file: client/go.mod
+      - name: Build native Windows ACL helper for source-only legacy setup tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -Type Directory -Force -Path bin | Out-Null
+          go -C client build -o ../bin/remotedesktopmcp.exe .
+          "DV_ACL_HELPER=$((Resolve-Path bin/remotedesktopmcp.exe).Path)" >> $env:GITHUB_ENV
       - name: Native bootstrap and private configuration (synthetic credentials)
         env:
           DV_TUNNEL_ID: tunnel_EXAMPLE
