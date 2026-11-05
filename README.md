@@ -48,9 +48,8 @@ Run `RemoteDesktopMCP-v*-linux-amd64.run` from your desktop environment. If exec
 Open a terminal in the download directory:
 
 
-```powershell
-$installer = (Get-ChildItem .\RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
-Start-Process -FilePath $installer -ArgumentList '--accept-licenses --default-answer --confirm-command install' -Wait
+```cmd
+for %F in (RemoteDesktopMCP-v*-windows-amd64.exe) do "%~fF" --accept-licenses --default-answer --confirm-command install
 ```
 
 
@@ -123,7 +122,7 @@ npm run smoke
 npm run audit:high
 ```
 
-`check` runs unit and compatibility tests; `smoke` initializes the MCP server and makes a read-only call. On Windows PowerShell, use `npm.cmd` if the execution policy blocks the npm shim.
+`check` runs unit and compatibility tests; `smoke` initializes the MCP server and makes a read-only call. On Windows CMD, run `npm.cmd` directly.
 
 Changes go through pull-request review and Squash Merge. See [Installer CI](.github/workflows/offline-installers.yml) and [Release CI](.github/workflows/release.yml) for the package builds.
 

@@ -29,61 +29,26 @@ export function unitQuote(value) {
   return '"' + value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('%', '%%').replaceAll('$', () => '$$') + '"';
 }
 export const xml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');
-export const psQuote = value => "'" + value.replaceAll("'", "''") + "'";
-export function launchPlist() {
-  return `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(runtimeScript)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>StandardOutPath</key><string>${xml(path.join(dir, 'tunnel.log'))}</string><key>StandardErrorPath</key><string>${xml(path.join(dir, 'tunnel.log'))}</string></dict></plist>`;
-}
-export function taskScript(action) {
-  if (action === 'stop') return `Stop-ScheduledTask -TaskName ${psQuote(label)} -ErrorAction Stop`;
-  const host = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
-  const launcher = path.join(root, 'scripts/windows-hidden-launch.vbs');
-  const task = psQuote(label);
-  const ownership = `$t=Get-ScheduledTask -TaskName ${task} -ErrorAction SilentlyContinue; if ($t) { $a=$t.Actions[0]; if ($t.Actions.Count -ne 1 -or $a.Execute -notmatch '(?i)(^|[\\\\/])wscript\\.exe$' -or $a.Arguments -ne ${psQuote('"' + launcher + '"')}) { throw 'Task name collision' } }`;
-  if (action === 'auto-status') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { 'missing' } elseif (-not $t.Settings.Enabled) { 'disabled' } else { 'enabled' }`;
-  if (action === 'auto-enable') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t) { throw 'Task missing' }; Enable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null`;
-  if (action === 'start-task') return `$ErrorActionPreference='Stop'; ${ownership}; if (-not $t -or -not $t.Settings.Enabled) { throw 'Logon task not enabled' }; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop`;
-  if (action === 'auto-disable') return `$ErrorActionPreference='Stop'; ${ownership}; if ($t) { Disable-ScheduledTask -TaskName ${task} -ErrorAction Stop | Out-Null }`;
-  if (!['start','register'].includes(action)) throw new Error('Unknown task action');
-  const registration = `$ErrorActionPreference='Stop'; ${ownership}; $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $a=New-ScheduledTaskAction -Execute ${psQuote(host)} -Argument ${psQuote('"' + launcher + '"')}; $t=New-ScheduledTaskTrigger -AtLogOn -User $user; $p=New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited; $s=New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName ${task} -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null`;
-  return action === 'start' ? registration + `; Start-ScheduledTask -TaskName ${task} -ErrorAction Stop` : registration;
-}
-function powershell(script) {
-  // Windows PowerShell 5.1 must resolve its own built-in modules. GitHub Actions
-  // and shells launched by pwsh 7 may inject an incompatible PSModulePath.
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) if (key.toLowerCase() === 'psmodulepath') delete env[key];
-  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
-    { env, encoding: 'utf8', timeout: 30000, windowsHide: true, stdio: 'pipe' });
+// Windows startup is owned by the bundled Go client; no PowerShell or VBS.
+function nativeAutostart(action) {
+  const client = path.join(root, 'bin', 'remotedesktopmcp.exe');
+  if (!fs.existsSync(client)) throw new Error('Bundled native Windows client is required');
+  const result = call(client, ['autostart', action]);
+  if (result.status !== 0) throw new Error('Native Windows startup operation failed');
+  try { return JSON.parse(result.stdout).autostart_enabled; }
+  catch { throw new Error('Invalid native Windows startup result'); }
 }
 export function windowsAutostartEnabled() {
-  if (process.platform !== 'win32') return null;
-  const result = powershell(taskScript('auto-status'));
-  if (result.status !== 0) throw new Error('Cannot inspect Windows scheduled task');
-  const text = result.stdout.trim().split(/\r?\n/).pop();
-  if (text === 'enabled') return true;
-  if (text === 'disabled') return false;
-  if (text === 'missing') return null;
-  throw new Error('Unexpected Windows scheduled task state');
+  return process.platform !== 'win32' ? null : nativeAutostart('status');
 }
 export function setWindowsAutostart(enabled) {
   if (process.platform !== 'win32' || state().manager !== 'scheduled-task')
-    throw new Error('Windows scheduled-task startup is not configured');
-  const current = windowsAutostartEnabled();
-  if (current === enabled) return current;
-  if (current === null) {
-    // An explicitly disabled initial state must persist, including across
-    // subsequent manual starts, instead of recreating an enabled logon task.
-    if (powershell(taskScript('register')).status !== 0)
-      throw new Error('Cannot register user-level Windows task');
-    if (!enabled && powershell(taskScript('auto-disable')).status !== 0)
-      throw new Error('Cannot disable Windows logon task');
-  } else if (powershell(taskScript(enabled ? 'auto-enable' : 'auto-disable')).status !== 0) {
-    throw new Error('Cannot change Windows logon auto-start');
-  }
-  if (windowsAutostartEnabled() !== enabled) throw new Error('Windows scheduled task did not retain state');
-  return enabled;
+    throw new Error('Windows login startup is not configured');
+  return nativeAutostart(enabled ? 'enable' : 'disable');
 }
-
+export function launchPlist() {
+  return `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${label}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(runtimeScript)}</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>StandardOutPath</key><string>${xml(path.join(dir, 'tunnel.log'))}</string><key>StandardErrorPath</key><string>${xml(path.join(dir, 'tunnel.log'))}</string></dict></plist>`;
+}
 async function control(action = 'status') {
   try {
     const c = readPrivateJSON(path.join(dir, 'control.json'));
@@ -117,8 +82,7 @@ export async function stop() {
     if (call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]).status !== 0 && await control()) throw new Error('Could not stop LaunchAgent');
   } else {
     await control('stop');
-    if (s.manager === 'scheduled-task') powershell(taskScript('stop'));
-    else { const p = ownedProcess(); if (p) process.kill(p.pid, 'SIGTERM'); }
+    const p = ownedProcess(); if (p) process.kill(p.pid, 'SIGTERM');
   }
   for (let i = 0; i < 30 && await control(); i++) await new Promise(r => setTimeout(r, 100));
 }
@@ -137,10 +101,6 @@ export async function start(manager) {
     privateWrite(plistFile, launchPlist());
     call('launchctl', ['bootout', `gui/${process.getuid()}/${label}`]);
     if (call('launchctl', ['bootstrap', `gui/${process.getuid()}`, plistFile]).status !== 0) throw new Error('LaunchAgent setup failed; use --background if no GUI login domain is available');
-  } else if (manager === 'scheduled-task' && windowsAutostartEnabled() === true) {
-    // Only explicitly opted-in installations run via a login startup task.
-    if (powershell(taskScript('start-task')).status !== 0)
-      throw new Error('Cannot start Windows logon task');
   } else {
     // Auto-start OFF or never configured: manual start never creates a login task.
     const fd = fs.openSync(logFile, fs.constants.O_CREAT | fs.constants.O_APPEND | fs.constants.O_WRONLY | (fs.constants.O_NOFOLLOW || 0), 0o600);

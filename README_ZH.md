@@ -48,9 +48,8 @@ RemoteDesktopMCP 使用 OpenAI Secure MCP Tunnel 建立这条连接：本机主�
 在下载目录打开终端：
 
 
-```powershell
-$installer = (Get-ChildItem .\RemoteDesktopMCP-v*-windows-amd64.exe | Select-Object -First 1).FullName
-Start-Process -FilePath $installer -ArgumentList '--accept-licenses --default-answer --confirm-command install' -Wait
+```cmd
+for %F in (RemoteDesktopMCP-v*-windows-amd64.exe) do "%~fF" --accept-licenses --default-answer --confirm-command install
 ```
 
 
@@ -123,7 +122,7 @@ npm run smoke
 npm run audit:high
 ```
 
-`check` 运行单元与兼容性测试，`smoke` 初始化 MCP 并做一次只读调用。Windows PowerShell 遇到脚本执行策略限制时，可以使用 `npm.cmd`。
+`check` 运行单元与兼容性测试，`smoke` 初始化 MCP 并做一次只读调用。Windows CMD 直接运行 `npm.cmd`。
 
 代码变更通过 PR Review 和 Squash Merge 合入。安装包与正式版本的构建流程分别见 [Installer CI](.github/workflows/offline-installers.yml) 和 [Release CI](.github/workflows/release.yml)。
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareUpstream } from '../scripts/patch-upstream.mjs';
-import { defaultManager, xml, psQuote, launchPlist, taskScript } from '../scripts/runtime.mjs';
+import { defaultManager, xml, launchPlist } from '../scripts/runtime.mjs';
 prepareUpstream();
 const s = await import('../node_modules/@wonderwhy-er/desktop-commander/dist/tools/schemas.js');
 const { zodToJsonSchema } = await import('../scripts/zod-json-schema.mjs');
@@ -21,21 +21,9 @@ test('Zod 4 preserves schemas, defaults, records, refinements and PDF preprocess
 });
 
 test('native manager definitions escape paths and never embed credentials', () => {
-  // SSH-only macOS hosts may lack a GUI launchd domain and use background mode.
   assert.ok(['launchd', 'background'].includes(defaultManager('darwin')));
   assert.equal(defaultManager('win32'), 'scheduled-task');
-  assert.equal(xml('a&<"'), 'a&amp;&lt;&quot;'); assert.equal(psQuote("a'b"), "'a''b'");
+  assert.equal(xml('a&<"'), 'a&amp;&lt;&quot;');
   assert.ok(launchPlist().includes('<key>ProgramArguments</key>'));
-  assert.ok(taskScript('start').includes('-RunLevel Limited'));
-  // Logon auto-start is a user-level scheduled task, never a Windows service.
-  assert.match(taskScript('auto-status'), /Get-ScheduledTask/);
-  assert.match(taskScript('auto-enable'), /Enable-ScheduledTask/);
-  assert.match(taskScript('auto-disable'), /Disable-ScheduledTask/);
-  assert.match(taskScript('register'), /-AtLogOn/);
-  assert.match(taskScript('start-task'), /Start-ScheduledTask/);
-  assert.doesNotMatch(taskScript('start-task'), /Register-ScheduledTask/);
-  assert.doesNotMatch(taskScript('auto-disable'), /Stop-ScheduledTask/);
-  assert.doesNotMatch(taskScript('auto-disable'), /Start-ScheduledTask/);
-
-  for (const text of [launchPlist(), taskScript('start')]) assert.ok(!text.includes('OPENAI_API_KEY'));
+  assert.ok(!launchPlist().includes('OPENAI_API_KEY'));
 });
