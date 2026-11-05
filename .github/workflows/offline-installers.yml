@@ -53,6 +53,13 @@ jobs:
           go test ./...
           go vet ./...
       - run: npm ci --no-audit --no-fund
+      - name: Build native Windows ACL helper for source checks
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -Type Directory -Force -Path bin | Out-Null
+          go -C client build -o ../bin/remotedesktopmcp.exe .
+          "DV_ACL_HELPER=$((Resolve-Path bin/remotedesktopmcp.exe).Path)" >> $env:GITHUB_ENV
       - run: npm run check
       - run: npm run smoke
       - name: Test offline installer security and metadata

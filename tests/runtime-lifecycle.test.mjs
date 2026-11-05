@@ -20,7 +20,7 @@ for (const auto of [false, undefined]) test(`worker separates local lifecycle an
   const setup={id:'tunnel_SYNTHETIC',revision:'saved-revision',tunnel:process.execPath,tunnelArgs:[path.join(root,'stub.mjs')],tunnel_auto_connect:auto};
   const setupFile=path.join(root,'runtime/setup.json'); fs.writeFileSync(setupFile,JSON.stringify(setup));
   fs.writeFileSync(path.join(root,'runtime/credentials.json'),JSON.stringify({apiKey:'synthetic-key'}));
-  const env={...process.env}; delete env.DV_ACL_HELPER;
+  const env={...process.env}; // Windows worker must retain the native ACL helper.
   const child=spawn(process.execPath,[path.join(root,'scripts/runtime.mjs'),'run'],{env,windowsHide:true,stdio:['ignore','ignore','pipe']});
   let diagnostic=''; child.stderr.setEncoding('utf8'); child.stderr.on('data',data=>diagnostic+=data);
   let control;
