@@ -15,23 +15,11 @@ func TestPreferencesPreserveConnectionAndApplyOnlyVerifiedStartup(t *testing.T) 
 		t.Fatal(err)
 	}
 	first, _ := readSetup(root)
-	enabled := false
-	var commands []string
-	b := startupBackend{platform: "windows", executable: `C:\Program Files\Example's App\client.exe`, account: `USER\example`}
-	b.run = func(name string, args ...string) ([]byte, error) {
-		command := strings.Join(args, " ")
-		commands = append(commands, command)
-		if strings.Contains(command, "Register-ScheduledTask") {
-			enabled = true
-		}
-		if strings.Contains(command, "Disable-ScheduledTask") {
-			enabled = false
-		}
-		if enabled {
-			return []byte("true"), nil
-		}
-		return []byte("false"), nil
-	}
+    enabled:=false
+    exists:=false
+    var commands []string
+    b:=startupBackend{platform:"windows",executable:`C:\Program Files\Example's App\client.exe`,account:`USER\example`}
+    b.run=simulatedNativeTask(b.executable,"serve-worker",&exists,&enabled,&commands)
 	yes, no := true, false
 	if err := savePreferencesWith(b, root, first.ID, "", &yes, &no); err != nil {
 		t.Fatal(err)
@@ -75,12 +63,11 @@ func TestStartupFailureIsNotPersisted(t *testing.T) {
 	if err := saveNative(root, "tunnel_TEST", "synthetic-key"); err != nil {
 		t.Fatal(err)
 	}
-	b := startupBackend{platform: "windows", run: func(_ string, args ...string) ([]byte, error) {
-		if strings.Contains(strings.Join(args, " "), "Register-ScheduledTask") {
-			return nil, errors.New("denied")
-		}
-		return []byte("false"), nil
-	}}
+    b:=startupBackend{platform:"windows",executable:`C:	ools\client.exe`}
+    b.run=func(name string,args ...string)([]byte,error) {
+        if len(args)>0 && args[0]=="/create" {return nil,errors.New("denied")}
+        return []byte("ERROR: The system cannot find the file specified."),errors.New("not found")
+    }
 	yes := true
 	before, _ := os.ReadFile(filepath.Join(root, "runtime", "setup.json"))
 	if savePreferencesWith(b, root, "tunnel_CHANGED", "replacement-key", &yes, nil) == nil {
@@ -140,43 +127,30 @@ func TestOldSetupKeepsAutomaticTunnelConnection(t *testing.T) {
 }
 
 func TestExistingWindowsTaskPreferenceUsesRegisteredWorker(t *testing.T) {
-	root := t.TempDir()
-	if err := saveNative(root, "tunnel_UPGRADE", "synthetic-key"); err != nil {
-		t.Fatal(err)
-	}
-	setup, _ := readSetup(root)
-	setup.Manager = "scheduled-task"
-	raw, _ := jsonMarshal(setup)
-	if err := writePrivate(filepath.Join(root, "runtime", "setup.json"), raw); err != nil {
-		t.Fatal(err)
-	}
-	enabled := true
-	b := startupBackend{platform: "windows"}
-	b.run = func(_ string, args ...string) ([]byte, error) {
-		command := strings.Join(args, " ")
-		if !strings.Contains(command, b.name(root, setup)) || !strings.Contains(command, "windows-hidden-launch.vbs") || strings.Contains(command, "-Login") {
-			t.Fatalf("wrong startup registration targeted: %s", command)
-		}
-		if strings.Contains(command, "Start-ScheduledTask") || strings.Contains(command, "Stop-ScheduledTask") {
-			t.Fatal("saving startup changed the running worker")
-		}
-		if strings.Contains(command, "Disable-ScheduledTask") {
-			enabled = false
-		}
-		if strings.Contains(command, "Enable-ScheduledTask") {
-			enabled = true
-		}
-		return []byte(fmt.Sprint(enabled)), nil
-	}
-	for _, desired := range []bool{false, false, true} {
-		if err := savePreferencesWith(b, root, setup.ID, "", &desired, nil); err != nil {
-			t.Fatal(err)
-		}
-		after, _ := readSetup(root)
-		if enabled != desired || after.Autostart == nil || *after.Autostart != desired || after.Revision != setup.Revision || after.Manager != setup.Manager {
-			t.Fatalf("startup preference not retained: %+v", after)
-		}
-	}
+    root:=t.TempDir()
+    if err:=saveNative(root,"tunnel_UPGRADE","synthetic-key");err!=nil {t.Fatal(err)}
+    setup,_:=readSetup(root)
+    setup.Manager="scheduled-task"
+    raw,_:=jsonMarshal(setup)
+    if err:=writePrivate(filepath.Join(root,"runtime","setup.json"),raw);err!=nil {t.Fatal(err)}
+    enabled:=true
+    exists:=true
+    var commands []string
+    b:=startupBackend{platform:"windows",executable:`C:\some\location\client.exe`}
+    b.run=simulatedNativeTask(b.executable,"serve-worker",&exists,&enabled,&commands)
+    for _,desired:=range []bool{false,false,true} {
+        if err:=savePreferencesWith(b,root,setup.ID,"",&desired,nil);err!=nil {t.Fatal(err)}
+        after,_:=readSetup(root)
+        if enabled!=desired || after.Autostart==nil || *after.Autostart!=desired ||
+           after.Revision!=setup.Revision || after.Manager!=setup.Manager {
+            t.Fatalf("startup preference not preserved: %+v",after)
+        }
+    }
+    for _,line:=range commands {
+        if strings.Contains(line,"powershell.exe") || strings.Contains(line,"Start-ScheduledTask") {
+           t.Fatal("legacy script-based startup call")
+        }
+    }
 }
 
 func TestManualLaunchdServiceStartPreservesDisabledLoginPreference(t *testing.T) {
@@ -212,4 +186,29 @@ func TestManualLaunchdServiceStartPreservesDisabledLoginPreference(t *testing.T)
 			}
 		})
 	}
+}
+
+
+// simulatedNativeTask is a fake Windows task scheduler for unit tests.
+// It tracks the same executable and startup worker command as a real native task.
+func simulatedNativeTask(executable, worker string, exists, enabled *bool, commands *[]string) func(string, ...string) ([]byte,error) {
+    return func(name string, args ...string) ([]byte,error) {
+        command:=name+" "+strings.Join(args," ")
+        *commands=append(*commands,command)
+        if name!="schtasks.exe" { return nil,fmt.Errorf("unexpected executable %s",name)}
+        switch args[0] {
+        case "/query":
+            if !*exists {return []byte("ERROR: The system cannot find the file specified."),errors.New("not found")}
+            state:="false"
+            if *enabled {state="true"}
+            return []byte(fmt.Sprintf("<Task><Actions><Exec><Command>%s</Command><Arguments>%s</Arguments></Exec></Actions><Settings><Enabled>%s</Enabled></Settings></Task>",executable,worker,state)),nil
+        case "/create": *exists=true;*enabled=true;return nil,nil
+        case "/change":
+            if len(args)>3 && args[len(args)-1]=="/disable" {*enabled=false}
+            if len(args)>3 && args[len(args)-1]=="/enable" {*enabled=true}
+            return nil,nil
+        case "/delete": *exists=false;*enabled=false;return nil,nil
+        }
+        return nil,fmt.Errorf("unexpected task scheduler command: %s",command)
+    }
 }

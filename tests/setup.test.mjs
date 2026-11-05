@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { root } from '../scripts/config.mjs';
 import { validateInput, freePort } from '../scripts/setup.mjs';
 import { privateWrite, privateDir } from '../scripts/private-files.mjs';
-import { unitQuote, taskScript } from '../scripts/runtime.mjs';
+import { unitQuote } from '../scripts/runtime.mjs';
 import { isDirectExecution } from '../scripts/entrypoint.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -37,14 +37,12 @@ test('reject missing/multiline credentials and malformed tunnel identity', () =>
   assert.throws(() => unitQuote('/path\nnew'));
 });
 
-test('Windows scheduled task uses windowless launcher without exposing credentials', () => {
-  const start = taskScript('start');
-  assert.match(start, /wscript.exe/);
-  assert.match(start, /windows-hidden-launch.vbs/);
-  assert.doesNotMatch(start, /OPENAI_API_KEY|DV_RUNTIME_API_KEY|tunnel_[A-Za-z0-9]+/);
-  const launcher = fs.readFileSync(path.join(root, 'scripts/windows-hidden-launch.vbs'), 'utf8');
-  assert.match(launcher, /shell.Run\(cmd, 0, True\)/);
+test('Windows startup is delegated to bundled native client', () => {
+  const source=fs.readFileSync(path.join(root,'scripts/runtime.mjs'),'utf8');
+  assert.match(source,/remotedesktopmcp\.exe/);
+  assert.doesNotMatch(source,/powershell\.exe|wscript\.exe|taskScript/);
 });
+
 
 test('occupied preferred port chooses another loopback port', async () => {
   const server = net.createServer();

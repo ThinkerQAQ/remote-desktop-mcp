@@ -314,6 +314,27 @@ func main() {
 	switch action {
 	case "--self-test":
 		fmt.Println("CLIENT_SELF_TEST_PASS")
+	case "autostart":
+		if len(args) != 1 || (args[0] != "status" && args[0] != "enable" && args[0] != "disable") {
+			log.Fatal("Use autostart status|enable|disable")
+		}
+		setup, err := readSetup(root)
+		if err != nil {
+			log.Fatal("Configure the tunnel first")
+		}
+		backend := systemStartup()
+		if args[0] != "status" {
+			if err := backend.apply(root, setup, args[0] == "enable"); err != nil {
+				log.Fatal(err)
+			}
+		}
+		enabled, err := backend.status(root, setup)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(map[string]bool{"autostart_enabled": enabled}); err != nil {
+			log.Fatal(err)
+		}
 	case "serve-worker":
 		if e = launchRuntime(root); e != nil {
 			log.Fatal(e)
