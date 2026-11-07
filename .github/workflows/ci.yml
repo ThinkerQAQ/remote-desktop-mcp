@@ -34,7 +34,7 @@ jobs:
             if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
           }
           if ($parseErrors.Count) { throw "PowerShell syntax validation failed" }
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: runner.os == 'Windows'
         with:
           go-version-file: client/go.mod
