@@ -207,7 +207,7 @@ jobs:
           test -f README.md
           test -f README_ZH.md
       - name: Download the three verified native installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-RemoteDesktopMCP-*-offline
           path: dist
