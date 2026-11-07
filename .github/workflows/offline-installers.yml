@@ -158,7 +158,7 @@ jobs:
         shell: pwsh
         run: |
           python -c "from pathlib import Path; from packaging.windows_gui_template import WINDOWS_GUI, pe_subsystem; files = list(Path('dist').glob('RemoteDesktopMCP-v*-windows-amd64.exe')); assert len(files) == 1, files; assert pe_subsystem(files[0]) == WINDOWS_GUI, 'Windows installer must use GUI subsystem'"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: RemoteDesktopMCP-${{ matrix.target }}-${{ matrix.arch }}-offline
           path: dist/RemoteDesktopMCP-*.${{ matrix.extension }}
